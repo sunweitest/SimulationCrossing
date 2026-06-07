@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+*.egg
+backend/.venv/
+backend/venv/
+backend/game.db
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Env (sensitive)
+backend/.env
+.env.production.local
+
+# Docs
+*.md
+!CLAUDE.md
+
+# Images
+images/
+*.png
+*.jpg
+
+# Docker
+Dockerfile*
+docker-compose.yml
+.dockerignore

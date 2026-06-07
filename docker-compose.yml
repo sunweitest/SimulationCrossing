@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: simulation_crossing
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d simulation_crossing"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:mysecretpassword@postgres:5432/simulation_crossing
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      SECRET_KEY: ${SECRET_KEY:-production-secret-change-me}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+      SHUIHU_APP_ID: ${SHUIHU_APP_ID}
+      SANGUO_APP_ID: ${SANGUO_APP_ID}
+      MINGDAI_APP_ID: ${MINGDAI_APP_ID}
+      QINGDAI_APP_ID: ${QINGDAI_APP_ID}
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:

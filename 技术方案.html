@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术方案 — AI模拟穿越小说</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --fg: #c9d1d9;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --card-bg: #161b22;
+    --code-bg: #1c2128;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+    background: var(--bg); color: var(--fg); line-height: 1.6;
+    max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem;
+  }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; color: var(--accent); }
+  h2 {
+    font-size: 1.3rem; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 1.2rem 0 0.5rem; }
+  p, li { margin-bottom: 0.4rem; }
+  .meta { color: #8b949e; font-size: 0.9rem; margin-bottom: 1.5rem; }
+  .card {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1.2rem; margin: 1rem 0;
+  }
+  .card h3:first-child { margin-top: 0; }
+  code {
+    background: var(--code-bg); padding: 0.15em 0.4em; border-radius: 3px;
+    font-size: 0.9em; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 1rem; overflow-x: auto;
+    font-size: 0.85rem; line-height: 1.5;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+  th, td { text-align: left; padding: 0.45rem 0.75rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--accent); font-weight: 600; }
+  .tag {
+    display: inline-block; padding: 0.12em 0.55em; border-radius: 999px;
+    font-size: 0.78rem; font-weight: 600; margin-right: 0.3rem;
+  }
+  .tag-py { background: #306998; color: #ffd43b; }
+  .tag-js { background: #f0db4f; color: #323330; }
+  .tag-db { background: #336791; color: #fff; }
+  .tag-infra { background: #fc6d26; color: #fff; }
+  .tag-ai { background: #7b3fe4; color: #fff; }
+  ul { padding-left: 1.3rem; margin-bottom: 0.6rem; }
+  .badge { padding: 0.1em 0.5em; border-radius: 4px; font-size: 0.8rem; }
+  .badge-ok { background: var(--green); color: #000; }
+  .badge-warn { background: var(--orange); color: #000; }
+</style>
+</head>
+<body>
+
+<h1>技术方案</h1>
+<p class="meta">
+  AI模拟穿越小说 / 历史 — 互动叙事游戏平台 ·
+  更新于 2026-05-31
+</p>
+
+<!-- ====== 概览 ====== -->
+<div class="card">
+<h3>产品简介</h3>
+<p>
+  玩家选择一个小说/历史时代，扮演预设或自定义角色，通过自然语言与 AI 互动，
+  推动剧情发展。后端通过 DashScope（阿里云百炼平台）调用通义千问大模型生成场景、
+  选项和成就奖励，前端使用 Vue 3 构建 SPA。
+</p>
+</div>
+
+<!-- ====== 技术架构 ====== -->
+<h2>技术架构</h2>
+
+<table>
+  <tr><th>层</th><th>技术</th><th>说明</th></tr>
+  <tr>
+    <td><span class="tag tag-js">前端</span></td>
+    <td>Vue 3 + Vite 5 + Pinia + Vue Router + Axios</td>
+    <td>SPA，开发端口 5173，Vite 代理 /api 到后端</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-py">后端</span></td>
+    <td>FastAPI 0.109 + SQLAlchemy 2.0 + Alembic + Pydantic v2</td>
+    <td>异步 REST API，端口 8000</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-db">数据库</span></td>
+    <td>PostgreSQL 15 + asyncpg</td>
+    <td>数据库名 <code>simulation_crossing</code>，表结构由 Alembic 管理</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-infra">缓存/限流</span></td>
+    <td>Redis 7</td>
+    <td>每日消息次数限制（免费 26 条，登录 +10）</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-ai">AI 引擎</span></td>
+    <td>DashScope (通义千问)</td>
+    <td>4 个应用分别对应三国/水浒/明代/清代</td>
+  </tr>
+</table>
+
+<!-- ====== 环境配置 ====== -->
+<h2>虚拟环境 &amp; 路径</h2>
+
+<div class="card">
+<h3>Python 虚拟环境</h3>
+<table>
+  <tr><th>项目</th><th>值</th></tr>
+  <tr><td>Python 版本</td><td>Python 3.10</td></tr>
+  <tr><td>虚拟环境路径</td><td><code>E:\pythonProject\InteractiveNovel\novel\</code></td></tr>
+  <tr><td>Python 可执行文件</td><td><code>E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe</code></td></tr>
+  <tr><td>pip 路径</td><td><code>E:\pythonProject\InteractiveNovel\novel\Scripts\pip.exe</code></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>项目根目录</h3>
+<p><code>E:\pythonProject\InteractiveNovel\SimulationCrossing\</code></p>
+<p>Git 仓库，主分支 <code>main</code>。</p>
+</div>
+
+<!-- ====== 项目结构 ====== -->
+<h2>项目目录结构</h2>
+<pre>
+SimulationCrossing/
+├── backend/                       # FastAPI 后端
+│   ├── app/
+│   │   ├── main.py                # 应用入口，CORS，路由注册
+│   │   ├── core/
+│   │   │   ├── config.py          # Pydantic Settings（读取 .env）
+│   │   │   ├── database.py        # SQLAlchemy 异步引擎 & session 工厂
+│   │   │   └── security.py        # JWT 认证
+│   │   ├── api/
+│   │   │   ├── game.py            # 游戏 API（会话、行动、角色查询）
+│   │   │   ├── auth.py            # 认证 API（注册/登录）
+│   │   │   └── deps.py            # 依赖（获取当前用户）
+│   │   ├── models/
+│   │   │   └── models.py          # ORM 模型（User, GameSession, SceneHistory, ChoiceHistory）
+│   │   ├── schemas/
+│   │   │   └── schemas.py         # Pydantic 请求/响应模型
+│   │   ├── services/
+│   │   │   └── game_service.py    # 游戏逻辑（预设角色、LLM 调用、JSON 解析）
+│   │   └── middleware/
+│   │       └── rate_limit.py      # Redis 限流中间件
+│   ├── alembic/                   # 数据库迁移
+│   │   ├── env.py                 # 迁移环境（异步 PostgreSQL）
+│   │   └── versions/
+│   │       └── 202605310001_initial_schema.py
+│   ├── alembic.ini
+│   ├── .env                       # 实际环境变量（不提交）
+│   ├── .env.example               # 环境变量模板
+│   └── requirements.txt           # Python 依赖
+├── frontend/                      # Vue 3 SPA
+│   ├── src/
+│   │   ├── App.vue
+│   │   ├── main.js
+│   │   ├── api/index.js           # Axios 实例 + API 方法
+│   │   ├── stores/                # Pinia 状态管理
+│   │   │   ├── auth.js
+│   │   │   └── game.js
+│   │   ├── views/                 # 页面
+│   │   │   ├── LoginView.vue
+│   │   │   ├── RegisterView.vue
+│   │   │   ├── CharacterCreateView.vue
+│   │   │   └── GameView.vue
+│   │   └── router/index.js
+│   ├── vite.config.js             # Vite 配置（代理 /api → :8000）
+│   └── package.json
+├── images/                        # 小说封面图片
+├── qwen_python.py                 # Streamlit 原始 Demo（参考）
+└── 技术方案.html                   # 本文件
+</pre>
+
+<!-- ====== 数据库 ====== -->
+<h2>数据库设计</h2>
+
+<table>
+  <tr><th>表名</th><th>用途</th><th>关键字段</th></tr>
+  <tr>
+    <td><code>users</code></td>
+    <td>用户</td>
+    <td>id, email, phone, hashed_password, is_active, created_at</td>
+  </tr>
+  <tr>
+    <td><code>game_sessions</code></td>
+    <td>游戏会话</td>
+    <td>id, user_id (FK), session_id (LLM), character_*, novel, timeline, points, achievements (JSON), current_scene (JSON)</td>
+  </tr>
+  <tr>
+    <td><code>scene_history</code></td>
+    <td>场景历史</td>
+    <td>id, game_session_id (FK), scene_description, choices (JSON), points_awarded, achievement</td>
+  </tr>
+  <tr>
+    <td><code>choice_history</code></td>
+    <td>选择历史</td>
+    <td>id, game_session_id (FK), choice, points</td>
+  </tr>
+</table>
+
+<div class="card">
+<h3>数据库迁移</h3>
+<p>使用 Alembic 管理所有表结构变更。迁移脚本位于 <code>backend/alembic/versions/</code>。</p>
+<p><strong>执行迁移：</strong></p>
+<pre>cd backend
+E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe -m alembic upgrade head</pre>
+<p><strong>生成新迁移：</strong></p>
+<pre>E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe -m alembic revision --autogenerate -m "描述"</pre>
+<p class="meta">⚠ 注意：<code>AUTO_CREATE_TABLES=false</code>，不要在启动时自动建表，始终通过 Alembic 管理。</p>
+</div>
+
+<!-- ====== API 端点 ====== -->
+<h2>API 端点一览</h2>
+
+<table>
+  <tr><th>方法</th><th>路径</th><th>说明</th><th>认证</th></tr>
+  <tr><td>GET</td><td><code>/</code></td><td>根路径，返回应用信息</td><td>-</td></tr>
+  <tr><td>GET</td><td><code>/health</code></td><td>健康检查</td><td>-</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/register</code></td><td>用户注册</td><td>-</td></tr>
+  <tr><td>POST</td><td><code>/api/auth/login</code></td><td>用户登录</td><td>-</td></tr>
+  <tr><td>GET</td><td><code>/api/game/characters</code></td><td>获取角色-时间节点映射</td><td>-</td></tr>
+  <tr><td>POST</td><td><code>/api/game/session</code></td><td>创建游戏会话</td><td>可选</td></tr>
+  <tr><td>POST</td><td><code>/api/game/action</code></td><td>执行游戏行动（限流）</td><td>可选</td></tr>
+  <tr><td>GET</td><td><code>/api/game/session/{id}</code></td><td>获取游戏会话详情</td><td>可选</td></tr>
+  <tr><td>GET</td><td><code>/api/game/session/{id}/state</code></td><td>获取游戏状态统计</td><td>可选</td></tr>
+</table>
+
+<!-- ====== 环境变量 ====== -->
+<h2>环境变量</h2>
+
+<pre>
+# --- 数据库 ---
+DATABASE_URL=postgresql+asyncpg://postgres:mysecretpassword@localhost:5432/simulation_crossing
+AUTO_CREATE_TABLES=false
+
+# --- JWT ---
+SECRET_KEY=your-secret-key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# --- Redis ---
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+# --- DashScope AI ---
+DASHSCOPE_API_KEY=sk-xxx
+SHUIHU_APP_ID=xxx
+SANGUO_APP_ID=xxx
+MINGDAI_APP_ID=xxx
+QINGDAI_APP_ID=xxx
+
+# --- CORS ---
+CORS_ORIGINS=["http://localhost:5173", "http://localhost:8080"]
+
+# --- 限流 ---
+DAILY_FREE_MESSAGES=26
+DAILY_LOGGED_IN_EXTRA=10
+</pre>
+
+<!-- ====== 启动方式 ====== -->
+<h2>启动方式</h2>
+
+<div class="card">
+<h3>1. 启动 PostgreSQL 和 Redis</h3>
+<pre># PostgreSQL 默认端口 5432，数据库 simulation_crossing
+# Redis 默认端口 6379</pre>
+</div>
+
+<div class="card">
+<h3>2. 数据库迁移</h3>
+<pre>cd backend
+E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe -m alembic upgrade head</pre>
+</div>
+
+<div class="card">
+<h3>3. 启动后端</h3>
+<pre>cd backend
+E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload</pre>
+<p>Swagger 文档：<a href="http://localhost:8000/docs">http://localhost:8000/docs</a></p>
+</div>
+
+<div class="card">
+<h3>4. 启动前端</h3>
+<pre>cd frontend
+npm install   # 仅首次
+npm run dev</pre>
+<p>开发服务器：<a href="http://localhost:5173">http://localhost:5173</a></p>
+<p class="meta">前端开发时，Vite 将 <code>/api</code> 请求代理到 <code>localhost:8000</code>，无需处理 CORS。</p>
+</div>
+
+<!-- ====== 预设角色 ====== -->
+<h2>预设角色 &amp; 时间节点限制</h2>
+
+<table>
+  <tr><th>时代</th><th>角色</th><th>可选时间节点</th></tr>
+  <tr><td rowspan="3">三国演义</td><td>诸葛亮</td><td>赤壁之战、北伐中原、三国鼎立</td></tr>
+  <tr><td>赵云</td><td>赤壁之战、三国鼎立</td></tr>
+  <tr><td>曹操</td><td>官渡之战、赤壁之战</td></tr>
+  <tr><td rowspan="3">水浒传</td><td>宋江</td><td>梁山聚义、招安之路</td></tr>
+  <tr><td>武松</td><td>梁山聚义、攻打祝家庄</td></tr>
+  <tr><td>林冲</td><td>梁山聚义、招安之路</td></tr>
+  <tr><td rowspan="3">明代</td><td>朱元璋</td><td>洪武之治</td></tr>
+  <tr><td>朱棣</td><td>靖难之役、永乐盛世</td></tr>
+  <tr><td>张居正</td><td>万历乱局</td></tr>
+  <tr><td rowspan="3">清代</td><td>康熙</td><td>康熙继位、九子夺嫡</td></tr>
+  <tr><td>林则徐</td><td>虎门销烟</td></tr>
+  <tr><td>李鸿章</td><td>洋务运动、甲午战争</td></tr>
+</table>
+
+<p class="meta">角色数据定义在 <code>backend/app/services/game_service.py</code> 的 <code>PRESET_CHARACTERS</code> 字典中。
+系统会校验角色与时间节点的匹配关系，如康熙不能出现在马戛尔尼访华。</p>
+
+<!-- ====== 关键设计决策 ====== -->
+<h2>关键设计决策</h2>
+
+<ul>
+  <li><strong>异步全链路：</strong>FastAPI + SQLAlchemy Async + asyncpg，避免 IO 阻塞。</li>
+  <li><strong>Alembic 管理表结构：</strong><code>AUTO_CREATE_TABLES=false</code>，不在启动时隐式建表，防止生产环境意外变更。</li>
+  <li><strong>未登录可用：</strong>游客也能创建会话和游玩，但每日消息次数更少（26 vs 36），且数据不绑定账号。</li>
+  <li><strong>Redis 限流降级：</strong>Redis 不可用时自动放行，不阻断游戏体验。</li>
+  <li><strong>LLM 返回解析容错：</strong>JSON 提取失败时使用 fallback 场景，确保游戏不中断。</li>
+  <li><strong>角色-时间节点约束：</strong>预设角色在 <code>timeline_scenes</code> 中定义合法时间节点，API 层强制校验。</li>
+</ul>
+
+</body>
+</html>
