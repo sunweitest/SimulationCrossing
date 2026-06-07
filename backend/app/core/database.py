@@ -2,10 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.orm import declarative_base
 from app.core.config import settings
 
-# 创建异步引擎
+# 创建异步数据库引擎。生产项目里表结构由 Alembic 管理，不在启动时隐式建表。
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=True,
+    echo=False,
     future=True
 )
 
@@ -30,6 +30,11 @@ async def get_db():
 
 
 async def init_db():
-    """初始化数据库"""
+    """开发兜底建表；正式流程请使用 Alembic migration。"""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+async def close_db():
+    """关闭数据库连接池"""
+    await engine.dispose()

@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:8001/api',
+  baseURL: '/api',
   timeout: 30000
 })
 
@@ -41,7 +41,9 @@ export const gameAPI = {
   createSession: (data) => api.post('/game/session', data),
   performAction: (data) => api.post('/game/action', data),
   getSession: (id) => api.get(`/game/session/${id}`),
-  getGameState: (id) => api.get(`/game/session/${id}/state`)
+  getGameState: (id) => api.get(`/game/session/${id}/state`),
+  getCharacters: (params) => api.get('/game/characters', { params }),
+  getCharacterDetail: (novel, name, timeline) => api.get(`/game/character/${encodeURIComponent(novel)}/${encodeURIComponent(name)}`, { params: { timeline } })
 }
 
 export default api

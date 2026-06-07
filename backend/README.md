@@ -30,6 +30,21 @@ docker run -d -p 6379:6379 redis:alpine
 redis-server
 ```
 
+## 初始化PostgreSQL数据库
+
+默认连接本地 Docker 容器中的 PostgreSQL:
+
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:mysecretpassword@localhost:5432/simulation_crossing
+```
+
+首次运行或表结构变更后执行迁移:
+
+```bash
+cd backend
+alembic upgrade head
+```
+
 ## 运行应用
 
 ```bash

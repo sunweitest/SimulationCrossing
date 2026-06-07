@@ -41,7 +41,7 @@ class CharacterCreate(BaseModel):
     """角色创建"""
     name: str
     gender: str
-    age: int = Field(..., ge=18, le=60)
+    age: int = Field(..., ge=18, le=120)
     rank: str
     background: Optional[str] = None
     novel: str  # 三国演义/水浒传/明代/清代

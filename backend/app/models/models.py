@@ -42,6 +42,10 @@ class GameSession(Base):
     achievements = Column(JSON, default=list)  # 成就列表
     current_scene = Column(JSON)  # 当前场景
 
+    # 上下文压缩
+    running_summary = Column(Text, nullable=True)  # 压缩后的故事概要
+    summary_turn_count = Column(Integer, default=0)  # 已压缩的对话轮数
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -79,3 +83,32 @@ class ChoiceHistory(Base):
 
     # 关系
     game_session = relationship("GameSession", back_populates="choices")
+
+
+class PresetCharacter(Base):
+    """预设角色表"""
+    __tablename__ = "preset_characters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    gender = Column(String)
+    age = Column(Integer)
+    rank = Column(String)
+    background = Column(Text)
+    starting_points = Column(Integer, default=0)
+
+    timelines = relationship("CharacterTimeline", back_populates="character", cascade="all, delete-orphan")
+
+
+class CharacterTimeline(Base):
+    """角色时间节点配置表"""
+    __tablename__ = "character_timelines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    character_id = Column(Integer, ForeignKey("preset_characters.id"), nullable=False)
+    timeline = Column(String, nullable=False)
+    background = Column(Text)
+    initial_scene = Column(Text, nullable=False)
+
+    character = relationship("PresetCharacter", back_populates="timelines")

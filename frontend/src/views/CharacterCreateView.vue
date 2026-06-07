@@ -2,6 +2,13 @@
   <div class="container">
     <h1>🎭 角色创建</h1>
 
+    <section class="world-visual" :style="{ backgroundImage: `url(${currentWorldImage.src})` }">
+      <div class="world-visual-overlay">
+        <span>{{ form.novel }}</span>
+        <strong>{{ currentWorldImage.caption }}</strong>
+      </div>
+    </section>
+
     <div class="grid grid-2">
       <!-- 左侧：角色创建表单 -->
       <div class="card">
@@ -69,7 +76,7 @@
 
             <div class="input-group">
               <label>年龄</label>
-              <input v-model.number="form.age" type="number" class="input" min="18" max="60" />
+              <input v-model.number="form.age" type="number" class="input" min="18" max="120" />
             </div>
           </div>
 
@@ -150,9 +157,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import { gameAPI } from '@/api'
+import sanguoImage from '../../../images/sanguo.png'
+import shuihuImage from '../../../images/shuihu.png'
+import mingdaiImage from '../../../images/mingdai.png'
+import hongloumengImage from '../../../images/hongloumeng.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -161,6 +173,7 @@ const characterType = ref('preset')
 const selectedPresetCharacter = ref('')
 const loading = ref(false)
 const error = ref('')
+const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
 
 const form = ref({
   novel: '三国演义',
@@ -181,26 +194,51 @@ const timelineMap = {
   '清代': ['八旗入关', '康熙继位', '九子夺嫡', '马戛尔尼访华', '虎门销烟', '金田起义', '第二次中英战争', '洋务运动', '甲午战争', '八国联军进京', '预备立宪']
 }
 
-// 预设角色映射（简化版）
-const presetCharactersMap = {
-  '三国演义': ['诸葛亮', '赵云', '曹操'],
-  '水浒传': ['宋江'],
-  '明代': ['朱元璋'],
-  '清代': ['康熙']
+// 从API加载的角色详情缓存
+const presetCharacterCache = ref({})
+
+const worldImageMap = {
+  '三国演义': {
+    src: sanguoImage,
+    caption: '赤壁风起，天下三分'
+  },
+  '水浒传': {
+    src: shuihuImage,
+    caption: '梁山泊上，聚义听潮'
+  },
+  '明代': {
+    src: mingdaiImage,
+    caption: '宫阙深处，风云暗涌'
+  },
+  '清代': {
+    src: hongloumengImage,
+    caption: '盛世帘影，旧梦将醒'
+  }
 }
 
 const timelines = computed(() => timelineMap[form.value.novel] || [])
-const presetCharacters = computed(() => presetCharactersMap[form.value.novel] || [])
+
+// 根据当前小说和时间节点筛选可用角色
+const presetCharacters = computed(() => {
+  const novelData = availableCharacters.value[form.value.novel]
+  if (!novelData) return []
+  // 返回当前时间节点可用的角色
+  return novelData[form.value.timeline] || []
+})
+
+const currentWorldImage = computed(() => worldImageMap[form.value.novel] || worldImageMap['三国演义'])
+const selectedPresetInfo = computed(() => {
+  const cacheKey = `${form.value.novel}/${selectedPresetCharacter.value}`
+  const presetInfo = presetCharacterCache.value[cacheKey]
+  if (!presetInfo) return null
+  return { ...presetInfo, novel: form.value.novel, timeline: form.value.timeline, character_type: 'preset' }
+})
 
 const previewCharacter = computed(() => {
   if (characterType.value === 'custom') {
     return form.value.name ? form.value : null
-  } else if (selectedPresetCharacter.value) {
-    return {
-      name: selectedPresetCharacter.value,
-      ...form.value,
-      starting_points: 60 // 预设角色默认积分
-    }
+  } else if (selectedPresetInfo.value) {
+    return selectedPresetInfo.value
   }
   return null
 })
@@ -208,21 +246,73 @@ const previewCharacter = computed(() => {
 const onNovelChange = () => {
   form.value.timeline = timelines.value[0] || ''
   selectedPresetCharacter.value = ''
+  if (characterType.value === 'preset') {
+    form.value.name = ''
+    form.value.starting_points = 0
+  }
+  loadCharacters()
 }
 
-const onPresetCharacterChange = () => {
-  if (selectedPresetCharacter.value) {
-    form.value.name = selectedPresetCharacter.value
-    form.value.starting_points = 60
+// 从API加载角色-时间节点映射
+const loadCharacters = async () => {
+  try {
+    const data = await gameAPI.getCharacters({ novel: form.value.novel })
+    availableCharacters.value = data
+  } catch (err) {
+    console.error('加载角色列表失败:', err)
   }
+}
+
+onMounted(() => {
+  loadCharacters()
+})
+
+const onPresetCharacterChange = async () => {
+  if (!selectedPresetCharacter.value) return
+  const cacheKey = `${form.value.novel}/${selectedPresetCharacter.value}`
+  if (presetCharacterCache.value[cacheKey]) {
+    applyPresetToForm(presetCharacterCache.value[cacheKey])
+    return
+  }
+  try {
+    const detail = await gameAPI.getCharacterDetail(form.value.novel, selectedPresetCharacter.value, form.value.timeline)
+    presetCharacterCache.value[cacheKey] = detail
+    applyPresetToForm(detail)
+  } catch (err) {
+    console.error('获取角色详情失败:', err)
+  }
+}
+
+const applyPresetToForm = (detail) => {
+  form.value.name = detail.name
+  form.value.gender = detail.gender
+  form.value.age = detail.age
+  form.value.rank = detail.rank
+  form.value.background = detail.background || ''
+  form.value.starting_points = detail.starting_points
 }
 
 watch(characterType, () => {
   if (characterType.value === 'custom') {
     form.value.name = ''
+    form.value.age = 20
+    form.value.rank = '未知'
+    form.value.background = ''
     form.value.starting_points = 0
+  } else {
+    onPresetCharacterChange()
   }
 })
+
+const formatApiError = (err) => {
+  const detail = err.response?.data?.detail
+  if (Array.isArray(detail)) {
+    const ageError = detail.find(item => item.loc?.includes('age'))
+    if (ageError) return '年龄请输入 18 到 120 之间的数字'
+    return detail.map(item => item.msg).join('；')
+  }
+  return typeof detail === 'string' ? detail : detail?.message || '创建游戏会话失败'
+}
 
 const startGame = async () => {
   error.value = ''
@@ -232,25 +322,36 @@ const startGame = async () => {
     return
   }
 
+  const age = characterType.value === 'preset' && selectedPresetInfo.value
+    ? Number(selectedPresetInfo.value.age)
+    : Number(form.value.age)
+  if (!Number.isFinite(age) || age < 18 || age > 120) {
+    error.value = '年龄请输入 18 到 120 之间的数字'
+    return
+  }
+
   loading.value = true
 
   try {
+    const characterSource = characterType.value === 'preset' && selectedPresetInfo.value
+      ? selectedPresetInfo.value
+      : form.value
     const characterData = {
-      name: form.value.name,
-      gender: form.value.gender,
-      age: form.value.age,
-      rank: form.value.rank,
-      background: form.value.background || '',
+      name: characterSource.name,
+      gender: characterSource.gender,
+      age,
+      rank: characterSource.rank,
+      background: characterSource.background || '',
       novel: form.value.novel,
       timeline: form.value.timeline,
       character_type: characterType.value,
-      starting_points: form.value.starting_points
+      starting_points: characterSource.starting_points
     }
 
     await gameStore.createGameSession(characterData)
     router.push('/game')
   } catch (err) {
-    error.value = err.response?.data?.detail || '创建游戏会话失败'
+    error.value = formatApiError(err)
   } finally {
     loading.value = false
   }
@@ -258,6 +359,39 @@ const startGame = async () => {
 </script>
 
 <style scoped>
+.world-visual {
+  min-height: 260px;
+  margin-bottom: 2rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: flex-end;
+}
+
+.world-visual-overlay {
+  width: 100%;
+  padding: 2rem;
+  color: white;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(18, 18, 18, 0.78));
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.world-visual-overlay span {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.world-visual-overlay strong {
+  display: block;
+  font-size: 1.75rem;
+  line-height: 1.25;
+}
+
 .radio-group {
   display: flex;
   gap: 1.5rem;
@@ -312,5 +446,19 @@ const startGame = async () => {
 textarea.input {
   resize: vertical;
   font-family: inherit;
+}
+
+@media (max-width: 768px) {
+  .world-visual {
+    min-height: 190px;
+  }
+
+  .world-visual-overlay {
+    padding: 1.25rem;
+  }
+
+  .world-visual-overlay strong {
+    font-size: 1.3rem;
+  }
 }
 </style>

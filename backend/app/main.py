@@ -1,19 +1,31 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import close_db, init_db
 from app.api import auth, game
 from app.middleware.rate_limit import RateLimitMiddleware
 from contextlib import asynccontextmanager
+
+# 配置业务日志
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+# 抑制第三方库的过多日志
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时初始化数据库
-    await init_db()
+    if settings.AUTO_CREATE_TABLES:
+        await init_db()
     yield
-    # 关闭时清理资源
+    await close_db()
 
 
 # 创建应用实例

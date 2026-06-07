@@ -1,247 +1,372 @@
-import os
 import re
 import json
-from typing import Optional, Dict
-from http import HTTPStatus
-from dashscope.app import Application
+import logging
+from dataclasses import dataclass, field
+from typing import Optional, Dict, List
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
+from app.models.models import PresetCharacter, CharacterTimeline, SceneHistory, ChoiceHistory, GameSession
+from app.services.llm.base import LLMProvider
+
+logger = logging.getLogger("game_service")
 
 
-# 预设角色数据（从原始代码迁移）
-PRESET_CHARACTERS = {
-    "三国演义": {
-        "诸葛亮": {
-            "name": "诸葛亮",
-            "gender": "男性",
-            "age": 35,
-            "rank": "军师",
-            "background": "字孔明，号卧龙，琅琊阳都人。三国时期蜀汉丞相，杰出的政治家、军事家、文学家。",
-            "starting_points": 60,
-            "timeline_scenes": {
-                "赤壁之战": {
-                    "background": "你正于东吴舌战群儒，力主孙刘联盟。周瑜对你又敬又忌，而你心中已有火攻之计。",
-                    "initial_scene": "你站在东吴大营外，江风凛冽。周瑜刚刚召见你，问：'孔明先生，若用火攻，当如何？'"
-                },
-                "北伐中原": {
-                    "background": "你已六出祁山。但为报先帝之托，仍坚持北伐，帐中烛火彻夜不熄。",
-                    "initial_scene": "五丈原秋风萧瑟，你卧于榻上，仍手执羽扇调度军务。姜维入帐急报：'魏军压境！'"
-                },
-                "三国鼎立": {
-                    "background": "蜀汉已立，你坐镇成都，内修政理，外联东吴，时刻警惕曹魏动向。",
-                    "initial_scene": "成都丞相府内，你正审阅各地奏章。忽有快马急报：'东吴欲背盟，联络曹魏！'"
-                }
-            }
-        },
-        "赵云": {
-            "name": "赵云",
-            "gender": "男性",
-            "age": 32,
-            "rank": "将军",
-            "background": "字子龙，常山真定人。身长八尺，姿颜雄伟，蜀汉名将，以忠勇著称。",
-            "starting_points": 45,
-            "timeline_scenes": {
-                "赤壁之战": {
-                    "background": "你随刘备驻扎夏口，虽未直接参战，但已展现出非凡胆略。",
-                    "initial_scene": "夏口江边，你奉命护送刘备家眷。远处赤壁火光冲天，喊杀声震耳欲聋。"
-                },
-                "三国鼎立": {
-                    "background": "你镇守江州，威名远播，百姓称颂'一身是胆'。",
-                    "initial_scene": "江州城头，你巡视防务。斥候来报：'魏将张郃率军逼近边境！'"
-                }
-            }
-        },
-        "曹操": {
-            "name": "曹操",
-            "gender": "男性",
-            "age": 40,
-            "rank": "丞相",
-            "background": "字孟德，小字阿瞒，沛国谯县人。东汉末年杰出政治家、军事家、文学家。魏武帝",
-            "starting_points": 65,
-            "timeline_scenes": {
-                "官渡之战": {
-                    "background": "你与袁绍对峙于官渡，粮草将尽，但已定下奇袭乌巢之计。",
-                    "initial_scene": "官渡大营中，你召集众将议事。荀彧献计：'明公，当速袭乌巢！'"
-                },
-                "赤壁之战": {
-                    "background": "你率百万大军南下，意图一统江南，但军中疫病流行，水战不利。",
-                    "initial_scene": "长江北岸，你眺望对岸联军。程昱谏言：'丞相，东吴有周瑜、诸葛亮，不可轻敌。'"
-                }
-            }
-        }
-    },
-    "水浒传": {
-        "宋江": {
-            "name": "宋江",
-            "gender": "男性",
-            "age": 38,
-            "rank": "小吏",
-            "background": "字公明，绰号呼保义、及时雨，梁山一百单八将之首。",
-            "starting_points": 55,
-            "timeline_scenes": {
-                "梁山聚义": {
-                    "background": "你刚上梁山，晁盖尚在，众好汉对你既敬且疑。",
-                    "initial_scene": "聚义厅中，你初见林冲、武松等好汉。晁盖举杯道：'今日得公明兄上山，梁山如虎添翼！'"
-                },
-                "招安之路": {
-                    "background": "你力主招安，但兄弟们多有不满，梁山内部暗流涌动。",
-                    "initial_scene": "忠义堂内，李逵怒吼：'哥哥若去东京，我便杀尽那帮狗官！'众头领面面相觑。"
-                }
-            }
-        }
-    },
-    "明代": {
-        "朱元璋": {
-            "name": "朱元璋",
-            "gender": "男性",
-            "age": 40,
-            "rank": "皇帝",
-            "background": "明朝开国皇帝，年号洪武，布衣出身，建立大明王朝。",
-            "starting_points": 70,
-            "timeline_scenes": {
-                "洪武之治": {
-                    "background": "你已登基为帝，大力反腐，整顿吏治，但诛杀功臣，朝中人心惶惶。",
-                    "initial_scene": "南京皇宫中，你批阅奏章，锦衣卫指挥使毛骧跪报：'胡惟庸结党营私，证据确凿！'"
-                }
-            }
-        }
-    },
-    "清代": {
-        "康熙": {
-            "name": "康熙",
-            "gender": "男性",
-            "age": 20,
-            "rank": "皇帝",
-            "background": "爱新觉罗·玄烨，清朝第四位皇帝，年号康熙，开创康乾盛世。",
-            "starting_points": 70,
-            "timeline_scenes": {
-                "康熙继位": {
-                    "background": "你年幼登基，权臣鳌拜专权，你暗中积蓄力量。",
-                    "initial_scene": "紫禁城乾清宫，你与祖母孝庄太后密谈。太后低语：'玄烨，鳌拜势大，当谨慎行事。'"
-                }
-            }
-        }
-    }
-}
+def _get_provider() -> LLMProvider:
+    """根据配置返回 LLM 提供者实例"""
+    provider_name = settings.LLM_PROVIDER.lower()
+    if provider_name == "deepseek":
+        from app.services.llm.deepseek_provider import DeepSeekProvider
+        return DeepSeekProvider()
+    else:
+        from app.services.llm.dashscope_provider import DashScopeProvider
+        return DashScopeProvider()
+
+
+_provider: Optional[LLMProvider] = None
+
+
+def get_provider() -> LLMProvider:
+    global _provider
+    if _provider is None:
+        _provider = _get_provider()
+    return _provider
+
+
+@dataclass
+class ConversationContext:
+    """对话上下文，包含预组装的 messages 和压缩状态"""
+    messages: List[Dict] = field(default_factory=list)
+    total_turns: int = 0
+    needs_compression: bool = False
+    turns_for_compression: List[Dict] = field(default_factory=list)
 
 
 class GameService:
     """游戏服务"""
 
+    # ── 角色查询 ──────────────────────────────────────────
+
     @staticmethod
-    def get_preset_character(novel: str, character_name: str, timeline: str) -> Optional[Dict]:
+    async def get_available_characters(
+        db: AsyncSession,
+        novel: Optional[str] = None,
+        timeline: Optional[str] = None,
+    ) -> Dict:
+        """获取可用角色列表，按小说和时间节点筛选"""
+        result: Dict[str, Dict[str, List[str]]] = {}
+
+        stmt = select(PresetCharacter).options(selectinload(PresetCharacter.timelines))
+        if novel:
+            stmt = stmt.where(PresetCharacter.novel == novel)
+        stmt = stmt.order_by(PresetCharacter.novel, PresetCharacter.id)
+
+        rows = await db.execute(stmt)
+        characters = rows.scalars().all()
+
+        for char in characters:
+            n_name = char.novel
+            if n_name not in result:
+                result[n_name] = {}
+            for tl in char.timelines:
+                if timeline and tl.timeline != timeline:
+                    continue
+                result[n_name].setdefault(tl.timeline, []).append(char.name)
+
+        return result
+
+    @staticmethod
+    async def get_preset_character(
+        db: AsyncSession, novel: str, character_name: str, timeline: str
+    ) -> Optional[Dict]:
         """获取预设角色信息"""
-        if novel not in PRESET_CHARACTERS:
+        stmt = (
+            select(PresetCharacter)
+            .options(selectinload(PresetCharacter.timelines))
+            .where(PresetCharacter.novel == novel, PresetCharacter.name == character_name)
+        )
+        row = await db.execute(stmt)
+        char = row.scalar_one_or_none()
+
+        if not char:
             return None
-        if character_name not in PRESET_CHARACTERS[novel]:
+
+        tl_match = None
+        for tl in char.timelines:
+            if tl.timeline == timeline:
+                tl_match = tl
+                break
+
+        if not tl_match:
             return None
 
-        base_info = PRESET_CHARACTERS[novel][character_name].copy()
-        timeline_scenes = base_info.get('timeline_scenes', {})
-        timeline_config = timeline_scenes.get(timeline)
+        return {
+            "name": char.name,
+            "gender": char.gender,
+            "age": char.age,
+            "rank": char.rank,
+            "background": char.background,
+            "starting_points": char.starting_points,
+            "novel": char.novel,
+            "timeline": timeline,
+            "dynamic_background": tl_match.background,
+            "initial_scene_desc": tl_match.initial_scene,
+        }
 
-        if timeline_config:
-            base_info['dynamic_background'] = timeline_config['background']
-            base_info['initial_scene_desc'] = timeline_config['initial_scene']
-        else:
-            base_info['dynamic_background'] = base_info['background']
-            base_info['initial_scene_desc'] = f"你穿越到了{novel}的{timeline}时期，成为了{character_name}。{base_info['background']}。你需要决定下一步的行动"
-
-        return base_info
+    # ── 对话历史与上下文压缩 ──────────────────────────────
 
     @staticmethod
-    async def call_llm_api(user_input: str, character_info: Dict, session_id: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
-        """调用LLM API生成场景
+    async def build_conversation_history(
+        db: AsyncSession,
+        game_session_id: int,
+    ) -> ConversationContext:
+        """构建 LLM 对话上下文，含自动压缩逻辑
 
-        返回: (响应文本, session_id)
+        返回 ConversationContext，包含：
+        - messages: 可直接传给 LLM 的消息列表
+        - needs_compression: 是否需要后台执行摘要
+        - turns_for_compression: 待压缩的轮次
         """
-        effective_background = character_info.get('dynamic_background') or character_info.get('background', '无')
+        # 加载游戏会话（获取 summary 字段）
+        session = await db.get(GameSession, game_session_id)
+        if not session:
+            logger.warning("HISTORY: 会话不存在 id=%d", game_session_id)
+            return ConversationContext()
 
-        prompt = f"""
-        玩家扮演的角色信息如下：
-        - 姓名：{character_info['name']}
-        - 身份：{character_info['rank']}
-        - 背景：{effective_background}
-        - 所处世界：{character_info['novel']}
-        - 时间节点：{character_info['timeline']}
-        玩家做出选择或行动：「{user_input}」
-        """.strip()
+        running_summary = session.running_summary
+        summary_turn_count = session.summary_turn_count or 0
 
-        # 根据小说选择对应的app_id
-        novel = character_info['novel']
-        if novel == "三国演义":
-            app_id = settings.SANGUO_APP_ID
-        elif novel == "水浒传":
-            app_id = settings.SHUIHU_APP_ID
-        elif novel == "明代":
-            app_id = settings.MINGDAI_APP_ID
-        elif novel == "清代":
-            app_id = settings.QINGDAI_APP_ID
-        else:
-            return None, session_id
+        # 查询场景历史（按时间排序）
+        scene_stmt = (
+            select(SceneHistory)
+            .where(SceneHistory.game_session_id == game_session_id)
+            .order_by(SceneHistory.created_at.asc())
+        )
+        scene_result = await db.execute(scene_stmt)
+        scenes = scene_result.scalars().all()
 
-        full_text = ""
-        new_session_id = session_id
+        # 查询选择历史
+        choice_stmt = (
+            select(ChoiceHistory)
+            .where(ChoiceHistory.game_session_id == game_session_id)
+            .order_by(ChoiceHistory.created_at.asc())
+        )
+        choice_result = await db.execute(choice_stmt)
+        choices = choice_result.scalars().all()
 
-        try:
-            responses = Application.call(
-                api_key=settings.DASHSCOPE_API_KEY,
-                app_id=app_id,
-                prompt=prompt,
-                session_id=session_id,
-                stream=True,
-                incremental_output=True
+        total_turns = len(scenes)
+
+        # 构建无冗余的对话历史（不含【可选行动】列表）
+        def _build_plain_history(scenes_slice, choices_slice) -> List[Dict]:
+            history = []
+            for i, sc in enumerate(scenes_slice):
+                history.append({
+                    "role": "assistant",
+                    "content": sc.scene_description or "",
+                })
+                if i < len(choices_slice):
+                    history.append({
+                        "role": "user",
+                        "content": f"我选择：「{choices_slice[i].choice}」",
+                    })
+            return history
+
+        threshold = settings.CONTEXT_COMPRESSION_THRESHOLD
+        recent = settings.CONTEXT_RECENT_TURNS
+
+        if total_turns <= threshold:
+            # 未达阈值：返回完整历史（截断到 max_history_turns）
+            max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
+            full_history = _build_plain_history(scenes, choices)
+            return ConversationContext(
+                messages=full_history[-max_msgs:],
+                total_turns=total_turns,
             )
 
-            for response in responses:
-                if response.status_code != HTTPStatus.OK:
-                    print(f"LLM调用失败: {response.message} (code={response.status_code})")
-                    return None, session_id
+        # 已达阈值：组装"前情提要 + 最近 N 轮"
+        old_turns_end = total_turns - recent
+        recent_scenes = scenes[-recent:]
+        recent_choices = choices[-recent:]
+        recent_messages = _build_plain_history(recent_scenes, recent_choices)
 
-                if response.output.text:
-                    full_text += response.output.text
+        if running_summary:
+            # 有摘要：前缀 + 最近轮
+            prefix = [
+                {
+                    "role": "user",
+                    "content": (
+                        "【前情提要】以下是之前发生的主要事件的概要，"
+                        "请记住这些信息以保持故事连贯性：\n\n"
+                        f"{running_summary}"
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": "我已了解之前的故事背景，会保持情节的连贯性。",
+                },
+            ]
+            messages = prefix + recent_messages
+        else:
+            # 首次压缩但摘要还没生成：用 max_history_turns 兜底
+            max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
+            full_history = _build_plain_history(scenes, choices)
+            messages = full_history[-max_msgs:]
 
-                if hasattr(response.output, 'session_id') and response.output.session_id:
-                    new_session_id = response.output.session_id
+        # 判断是否需要触发后台压缩
+        needs_compression = summary_turn_count < old_turns_end
+        turns_for_compression = []
+        if needs_compression:
+            # 提取摘要未覆盖的旧轮
+            new_start = summary_turn_count
+            turns_for_compression = _build_plain_history(
+                scenes[new_start:old_turns_end],
+                choices[new_start:old_turns_end],
+            )
 
-            return full_text, new_session_id
+        logger.info(
+            "HISTORY: total_turns=%d summary_turns=%d messages=%d needs_compression=%s compress_turns=%d",
+            total_turns,
+            summary_turn_count,
+            len(messages),
+            needs_compression,
+            len(turns_for_compression),
+        )
+
+        return ConversationContext(
+            messages=messages,
+            total_turns=total_turns,
+            needs_compression=needs_compression,
+            turns_for_compression=turns_for_compression,
+        )
+
+    @staticmethod
+    async def compress_and_store_context(
+        game_session_id: int,
+        turns_to_compress: List[Dict],
+        total_turns: int,
+    ) -> None:
+        """后台任务：压缩旧对话并存入数据库
+
+        使用独立的 DB 会话，在 HTTP 响应之后执行。
+        失败时静默返回，下次请求会自动重试。
+        """
+        from app.services.context_compressor import (
+            build_summary_prompt,
+            call_summarization,
+        )
+
+        try:
+            async with AsyncSessionLocal() as db:
+                session = await db.get(GameSession, game_session_id)
+                if not session:
+                    logger.error("COMPRESS: session not found id=%d", game_session_id)
+                    return
+
+                existing_summary = session.running_summary
+                prompt = build_summary_prompt(existing_summary, turns_to_compress)
+                new_summary = await call_summarization(prompt)
+
+                if new_summary:
+                    session.running_summary = new_summary
+                    session.summary_turn_count = (
+                        total_turns - settings.CONTEXT_RECENT_TURNS
+                    )
+                    await db.commit()
+                    logger.info(
+                        "COMPRESS_OK: session=%d turns_compressed=%d summary_chars=%d",
+                        game_session_id,
+                        len(turns_to_compress),
+                        len(new_summary),
+                    )
+                else:
+                    logger.warning(
+                        "COMPRESS_FAIL: summarization returned empty, will retry next turn"
+                    )
 
         except Exception as e:
-            print(f"调用异常: {e}")
-            return None, session_id
+            logger.exception("COMPRESS_ERROR: session=%d error=%s", game_session_id, e)
+
+    # ── LLM 调用 ──────────────────────────────────────────
+
+    @staticmethod
+    async def call_llm_api(
+        user_input: str,
+        character_info: Dict,
+        session_id: Optional[str] = None,
+        history: Optional[List[Dict]] = None,
+    ) -> tuple[Optional[str], Optional[str]]:
+        """调用 LLM API 生成场景"""
+        provider = get_provider()
+        return await provider.generate(
+            character_info,
+            user_input,
+            session_id,
+            history=history,
+        )
 
     @staticmethod
     def parse_llm_response(raw_text: str) -> Optional[Dict]:
-        """解析LLM返回的JSON"""
+        """解析 LLM 返回的 JSON"""
         if not raw_text:
+            logger.warning("PARSE: raw_text为空")
             return None
 
         json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if not json_match:
+            logger.warning("PARSE: 未找到JSON对象 raw_text前100字符=%s", raw_text[:100])
             return None
 
+        json_str = json_match.group()
         try:
-            result = json.loads(json_match.group())
+            result = json.loads(json_str)
             required = ['scene_description', 'choices', 'game_update']
-            if not all(k in result for k in required):
+            missing = [k for k in required if k not in result]
+            if missing:
+                logger.warning("PARSE: JSON缺少字段 missing=%s json=%s", missing, json_str[:200])
                 return None
 
             if not isinstance(result['choices'], list) or len(result['choices']) == 0:
-                result['choices'] = ["继续探索", "寻求帮助", "随机应变"]
+                result['choices'] = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
+
+            # 确保恰好 5 个选项
+            if len(result['choices']) < 5:
+                defaults = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
+                for d in defaults:
+                    if len(result['choices']) >= 5:
+                        break
+                    if d not in result['choices']:
+                        result['choices'].append(d)
 
             game_update = result.setdefault('game_update', {})
             game_update.setdefault('points_awarded', 5)
             game_update.setdefault('new_achievement', "")
 
+            logger.info(
+                "PARSE_OK: scene=%s choices=%d points=%d",
+                result['scene_description'][:50],
+                len(result['choices']),
+                game_update.get('points_awarded', 0),
+            )
             return result
+        except json.JSONDecodeError as e:
+            logger.exception("PARSE_JSON_ERROR: %s json_str前200字符=%s", e, json_str[:200])
+            return None
         except Exception as e:
-            print(f"JSON解析失败: {e}")
+            logger.exception("PARSE_UNEXPECTED: %s", e)
             return None
 
     @staticmethod
     def get_fallback_scene(user_action: str) -> Dict:
-        """获取备用场景"""
+        """获取备用场景（LLM 调用失败时使用）"""
+        logger.info("FALLBACK: 使用备用场景 action=%s", user_action)
         return {
-            "scene_description": f"风云突变！你刚刚选择「{user_action}」，四周气氛骤然紧张...",
-            "choices": ["拔剑应对", "冷静观察", "高声质问", "悄然后退", "寻求盟友"],
-            "game_update": {"points_awarded": 7, "new_achievement": "随机应变"}
+            "scene_description": (
+                f"风云突变！你刚刚选择了「{user_action}」，"
+                f"四周的气氛骤然紧张起来。远处传来隐约的马蹄声，"
+                f"像是有什么大事即将发生。你深吸一口气，绷紧了神经。"
+            ),
+            "choices": ["拔剑应对", "冷静观察", "高声质问", "悄然退后", "寻求盟友"],
+            "game_update": {"points_awarded": 7, "new_achievement": "随机应变"},
         }

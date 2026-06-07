@@ -5,6 +5,17 @@
     <div class="grid">
       <!-- 左侧：角色信息 -->
       <div class="sidebar">
+        <div
+          v-if="currentWorldImage"
+          class="world-card"
+          :style="{ backgroundImage: `url(${currentWorldImage.src})` }"
+        >
+          <div class="world-card-caption">
+            <span>{{ gameStore.currentSession?.novel }}</span>
+            <strong>{{ gameStore.currentSession?.timeline }}</strong>
+          </div>
+        </div>
+
         <div class="card game-stats">
           <h3>📜 角色信息</h3>
           <div v-if="gameStore.currentSession">
@@ -85,6 +96,7 @@
                   v-for="(choice, index) in currentScene.choices"
                   :key="index"
                   @click="performAction(choice)"
+                  :disabled="gameStore.isGenerating"
                   class="btn choice-btn"
                 >
                   {{ choice }}
@@ -102,7 +114,11 @@
                   placeholder="或者输入自定义行动..."
                   @keyup.enter="performCustomAction"
                 />
-                <button @click="performCustomAction" class="btn btn-primary mt-2">
+                <button
+                  @click="performCustomAction"
+                  class="btn btn-primary mt-2"
+                  :disabled="gameStore.isGenerating || !customAction.trim()"
+                >
                   执行行动
                 </button>
               </div>
@@ -121,6 +137,14 @@
               <router-link to="/login" class="btn btn-primary">前往登录</router-link>
             </div>
           </div>
+
+          <!-- 成就解锁提示 -->
+          <Transition name="toast">
+            <div v-if="achievementToast?.visible" class="achievement-toast">
+              <span class="toast-icon">🏆</span>
+              <span class="toast-text">成就解锁：{{ achievementToast.name }}</span>
+            </div>
+          </Transition>
         </div>
       </div>
     </div>
@@ -131,6 +155,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import sanguoImage from '../../../images/sanguo.png'
+import shuihuImage from '../../../images/shuihu.png'
+import mingdaiImage from '../../../images/mingdai.png'
+import hongloumengImage from '../../../images/hongloumeng.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -139,8 +167,16 @@ const customAction = ref('')
 const error = ref('')
 const needsLogin = ref(false)
 const displayedScene = ref('')
+const achievementToast = ref(null)  // { name, visible }
 
 const currentScene = computed(() => gameStore.currentSession?.current_scene)
+const worldImageMap = {
+  '三国演义': { src: sanguoImage },
+  '水浒传': { src: shuihuImage },
+  '明代': { src: mingdaiImage },
+  '清代': { src: hongloumengImage }
+}
+const currentWorldImage = computed(() => worldImageMap[gameStore.currentSession?.novel])
 
 // 模拟打字机效果
 const typewriterEffect = (text) => {
@@ -168,6 +204,8 @@ onMounted(() => {
 })
 
 const performAction = async (action) => {
+  if (gameStore.isGenerating) return
+
   error.value = ''
   needsLogin.value = false
 
@@ -183,6 +221,13 @@ const performAction = async (action) => {
       if (!achievements.includes(scene.game_update.new_achievement)) {
         achievements.push(scene.game_update.new_achievement)
         gameStore.currentSession.achievements = achievements
+        // 显示成就解锁提示
+        achievementToast.value = { name: scene.game_update.new_achievement, visible: true }
+        setTimeout(() => {
+          if (achievementToast.value?.name === scene.game_update.new_achievement) {
+            achievementToast.value = null
+          }
+        }, 3000)
       }
     }
 
@@ -192,7 +237,8 @@ const performAction = async (action) => {
       error.value = err.response.data.detail.message || '今日次数已用完'
       needsLogin.value = err.response.data.detail.needs_login
     } else {
-      error.value = err.response?.data?.detail || '执行行动失败'
+      const detail = err.response?.data?.detail
+      error.value = typeof detail === 'string' ? detail : detail?.message || '执行行动失败'
     }
   }
 }
@@ -229,6 +275,41 @@ const newGame = () => {
   height: fit-content;
 }
 
+.world-card {
+  min-height: 220px;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  border: 2px solid var(--border-color);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: flex-end;
+}
+
+.world-card-caption {
+  width: 100%;
+  padding: 1rem;
+  color: white;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(18, 18, 18, 0.8));
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.world-card-caption span,
+.world-card-caption strong {
+  display: block;
+}
+
+.world-card-caption span {
+  font-size: 0.9rem;
+}
+
+.world-card-caption strong {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
 .main-content {
   min-height: 600px;
 }
@@ -236,6 +317,12 @@ const newGame = () => {
 .custom-action {
   display: flex;
   flex-direction: column;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .error-message {
@@ -251,6 +338,54 @@ h4 {
   margin-top: 1rem;
   margin-bottom: 0.5rem;
   color: var(--text-color);
+}
+
+/* 成就解锁提示 */
+.achievement-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 1000;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.toast-icon {
+  font-size: 1.5rem;
+  animation: bounce 0.6s ease infinite alternate;
+}
+
+@keyframes bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+
+/* Toast 过渡动画 */
+.toast-enter-active {
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast-leave-active {
+  transition: all 0.3s ease-in;
+}
+
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px) scale(0.8);
+}
+
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-10px) scale(0.9);
 }
 
 @media (max-width: 1024px) {

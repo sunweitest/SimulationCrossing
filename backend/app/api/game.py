@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
@@ -10,9 +11,20 @@ from app.schemas.schemas import (
 )
 from app.services.game_service import GameService
 from typing import Optional
-import uuid
+
+logger = logging.getLogger("game_api")
 
 router = APIRouter(prefix="/api/game", tags=["游戏"])
+
+
+@router.get("/characters")
+async def get_available_characters(
+    novel: Optional[str] = None,
+    timeline: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取可用预设角色列表，可按小说和时间节点筛选"""
+    return await GameService.get_available_characters(db, novel=novel, timeline=timeline)
 
 
 @router.post("/session", response_model=GameSessionResponse)
@@ -27,7 +39,7 @@ async def create_game_session(
     # 如果是预设角色，获取完整信息
     character_info = None
     if character.character_type == "preset":
-        character_info = GameService.get_preset_character(
+        character_info = await GameService.get_preset_character(db,
             character.novel,
             character.name,
             character.timeline
@@ -38,19 +50,37 @@ async def create_game_session(
                 detail="预设角色不存在"
             )
 
+    session_character = {
+        "name": character.name,
+        "gender": character.gender,
+        "age": character.age,
+        "rank": character.rank,
+        "background": character.background,
+        "starting_points": character.starting_points
+    }
+    if character_info:
+        session_character.update({
+            "name": character_info["name"],
+            "gender": character_info["gender"],
+            "age": character_info["age"],
+            "rank": character_info["rank"],
+            "background": character_info["background"],
+            "starting_points": character_info.get("starting_points", character.starting_points)
+        })
+
     # 创建游戏会话
     game_session = GameSession(
         user_id=current_user.id if current_user else None,
         session_id=None,  # 首次调用LLM时生成
-        character_name=character.name,
-        character_gender=character.gender,
-        character_age=character.age,
-        character_rank=character.rank,
-        character_background=character.background,
+        character_name=session_character["name"],
+        character_gender=session_character["gender"],
+        character_age=session_character["age"],
+        character_rank=session_character["rank"],
+        character_background=session_character["background"],
         novel=character.novel,
         timeline=character.timeline,
         character_type=character.character_type,
-        points=character.starting_points,
+        points=session_character["starting_points"],
         achievements=[]
     )
 
@@ -59,9 +89,9 @@ async def create_game_session(
         initial_scene = {
             "scene_description": character_info['initial_scene_desc'],
             "choices": ["开始按原剧情初始发展", "尝试改变剧情走向", "先观察环境", "随缘", "寻找穿越的原因"],
-            "game_update": {"points_awarded": 0, "new_achievement": f"成为{character.name}"}
+            "game_update": {"points_awarded": 0, "new_achievement": f"成为{session_character['name']}"}
         }
-        game_session.achievements.append(f"成为{character.name}")
+        game_session.achievements.append(f"成为{session_character['name']}")
     else:
         initial_scene = {
             "scene_description": f"你穿越到了{character.novel}的{character.timeline}时期，成为了{character.rank}。你需要决定下一步的行动",
@@ -94,10 +124,15 @@ async def create_game_session(
 @router.post("/action", response_model=Scene)
 async def perform_action(
     action_data: UserAction,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
     """执行游戏行动"""
+    logger.info("ACTION: session_id=%d action=%s user=%s",
+                action_data.game_session_id, action_data.action,
+                current_user.id if current_user else "guest")
+
     # 获取游戏会话
     result = await db.execute(
         select(GameSession).where(GameSession.id == action_data.game_session_id)
@@ -105,6 +140,7 @@ async def perform_action(
     game_session = result.scalar_one_or_none()
 
     if not game_session:
+        logger.warning("ACTION: 会话不存在 session_id=%d", action_data.game_session_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="游戏会话不存在"
@@ -112,6 +148,8 @@ async def perform_action(
 
     # 验证会话所有权（如果用户已登录）
     if current_user and game_session.user_id != current_user.id:
+        logger.warning("ACTION: 权限拒绝 session_id=%d owner=%s requester=%s",
+                       action_data.game_session_id, game_session.user_id, current_user.id)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权访问此游戏会话"
@@ -128,23 +166,43 @@ async def perform_action(
 
     # 如果是预设角色，获取动态背景
     if game_session.character_type == "preset":
-        preset_info = GameService.get_preset_character(
+        preset_info = await GameService.get_preset_character(db,
             game_session.novel,
             game_session.character_name,
             game_session.timeline
         )
         if preset_info:
             character_info['dynamic_background'] = preset_info.get('dynamic_background')
+        else:
+            logger.warning("ACTION: 预设角色信息未找到 novel=%s name=%s timeline=%s",
+                           game_session.novel, game_session.character_name, game_session.timeline)
 
-    # 调用LLM
+    # 构建对话上下文（含自动压缩逻辑）
+    context = await GameService.build_conversation_history(
+        db,
+        action_data.game_session_id,
+    )
+
+    # 调度后台上下文压缩
+    if context.needs_compression and context.turns_for_compression:
+        background_tasks.add_task(
+            GameService.compress_and_store_context,
+            action_data.game_session_id,
+            context.turns_for_compression,
+            context.total_turns,
+        )
+
+    # 调用LLM（使用预组装的 messages）
     raw_response, new_session_id = await GameService.call_llm_api(
         action_data.action,
         character_info,
-        game_session.session_id
+        game_session.session_id,
+        history=context.messages,
     )
 
     # 更新session_id
     if new_session_id:
+        logger.info("ACTION: session_id更新 old=%s new=%s", game_session.session_id, new_session_id)
         game_session.session_id = new_session_id
 
     # 解析响应
@@ -153,6 +211,7 @@ async def perform_action(
         new_scene = GameService.parse_llm_response(raw_response)
 
     if not new_scene:
+        logger.warning("ACTION: 使用fallback场景 raw_response_is_none=%s", raw_response is None)
         new_scene = GameService.get_fallback_scene(action_data.action)
 
     # 更新游戏状态
@@ -187,6 +246,23 @@ async def perform_action(
     await db.refresh(game_session)
 
     return Scene(**new_scene)
+
+
+@router.get("/character/{novel}/{name}")
+async def get_character_detail(
+    novel: str,
+    name: str,
+    timeline: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """获取预设角色详细信息"""
+    char_info = await GameService.get_preset_character(db, novel, name, timeline)
+    if not char_info:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="角色不存在或该时间节点不适用"
+        )
+    return char_info
 
 
 @router.get("/session/{session_id}", response_model=GameSessionResponse)

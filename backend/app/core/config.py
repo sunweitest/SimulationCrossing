@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
 
     # 数据库配置
-    DATABASE_URL: str = "sqlite+aiosqlite:///./game.db"
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:mysecretpassword@localhost:5432/simulation_crossing"
+    AUTO_CREATE_TABLES: bool = False
 
     # JWT配置
     SECRET_KEY: str
@@ -20,12 +21,27 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
 
-    # DashScope API配置
-    DASHSCOPE_API_KEY: str
-    SHUIHU_APP_ID: str
-    SANGUO_APP_ID: str
-    MINGDAI_APP_ID: str
-    QINGDAI_APP_ID: str
+    # LLM 配置
+    LLM_PROVIDER: str = "dashscope"  # "dashscope" 或 "deepseek"
+
+    # DashScope API配置（仅 LLM_PROVIDER=dashscope 时需要）
+    DASHSCOPE_API_KEY: str = ""
+    SHUIHU_APP_ID: str = ""
+    SANGUO_APP_ID: str = ""
+    MINGDAI_APP_ID: str = ""
+    QINGDAI_APP_ID: str = ""
+
+    # DeepSeek API配置（仅 LLM_PROVIDER=deepseek 时需要）
+    DEEPSEEK_API_KEY: str = ""
+
+    # DeepSeek 模型参数
+    DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意
+    DEEPSEEK_MAX_TOKENS: int = 4096          # 最大输出 token 数
+    DEEPSEEK_MAX_HISTORY_TURNS: int = 8      # 保留的最近对话轮数
+
+    # 上下文压缩配置
+    CONTEXT_COMPRESSION_THRESHOLD: int = 10  # 触发压缩的对话轮数阈值
+    CONTEXT_RECENT_TURNS: int = 5            # 压缩后保留的最近完整轮数
 
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
