@@ -81,20 +81,38 @@ def _favorability_label(score: int) -> str:
         return "深仇大恨"
 
 
-def _build_character_reference(characters_state: Optional[Dict]) -> str:
-    """从角色追踪 JSON 构建【当前人物关系】文本块
+def _prefilter_characters(
+    user_input: str,
+    characters_state: Optional[Dict],
+    scene_text: str = "",
+) -> list[Dict]:
+    """扫描用户输入（及可选场景文本），匹配 characters_state 中的角色名。
 
-    供 build_conversation_history 注入到 LLM 对话历史中。
+    只返回用户提及的角色，避免全量注入浪费 token。
+    匹配策略：简单子串匹配（角色名出现在输入文本中即命中）。
     """
     if not characters_state:
-        return ""
-
+        return []
     chars = characters_state.get("characters", [])
     if not chars:
+        return []
+
+    combined = user_input + (" " + scene_text if scene_text else "")
+    matched = []
+    for c in chars:
+        name = c.get("name", "")
+        if name and name in combined:
+            matched.append(c)
+    return matched
+
+
+def _build_character_context(matched_characters: list[Dict]) -> str:
+    """将命中的角色列表格式化为注入到用户消息中的角色信息块"""
+    if not matched_characters:
         return ""
 
     lines = []
-    for c in chars:
+    for c in matched_characters:
         fav = c.get("favorability", 0)
         label = _favorability_label(fav)
         lines.append(
@@ -105,10 +123,43 @@ def _build_character_reference(characters_state: Optional[Dict]) -> str:
         )
 
     return (
-        "\n\n【当前人物关系】请记住以下角色关系及好感度，"
-        "在故事中保持人物行为与关系、好感度一致：\n"
+        "\n\n【相关人物信息】以下是你当前提及或涉及的人物详情，"
+        "请在剧情中保持其行为与关系、好感度一致：\n"
         + "\n".join(lines)
     )
+
+
+async def _character_tool_handler(
+    tool_name: str,
+    arguments_json: str,
+    *,
+    characters_state: Optional[Dict],
+) -> str:
+    """Tool call 处理函数：根据 name 查询角色详情
+
+    由 DeepSeek provider 的 tool loop 调用，返回 JSON 字符串。
+    """
+    try:
+        args = json.loads(arguments_json)
+    except json.JSONDecodeError:
+        return json.dumps({"error": "参数解析失败"}, ensure_ascii=False)
+
+    name = args.get("name", "")
+    if not name:
+        return json.dumps({"error": "缺少 name 参数"}, ensure_ascii=False)
+
+    if not characters_state:
+        return json.dumps({"found": False, "message": "暂无角色追踪数据"}, ensure_ascii=False)
+
+    chars = characters_state.get("characters", [])
+    for c in chars:
+        if c.get("name") == name:
+            fav = c.get("favorability", 0)
+            c_copy = dict(c)
+            c_copy["favorability_label"] = _favorability_label(fav)
+            return json.dumps({"found": True, "character": c_copy}, ensure_ascii=False)
+
+    return json.dumps({"found": False, "message": f"未找到角色「{name}」"}, ensure_ascii=False)
 
 
 class GameService:
@@ -260,9 +311,7 @@ class GameService:
 
         if running_summary:
             # 有摘要：前缀 + 最近轮
-            # 构建人物关系引用（如果存在）
-            char_ref = _build_character_reference(session.characters_state)
-
+            # 注：人物关系不再全量注入，改为按需预过滤 + tool calling
             prefix = [
                 {
                     "role": "user",
@@ -270,12 +319,11 @@ class GameService:
                         "【前情提要】以下是之前发生的主要事件的概要，"
                         "请记住这些信息以保持故事连贯性：\n\n"
                         f"{running_summary}"
-                        f"{char_ref}"
                     ),
                 },
                 {
                     "role": "assistant",
-                    "content": "我已了解之前的故事背景和人物关系，会保持情节的连贯性。",
+                    "content": "我已了解之前的故事背景，会保持情节的连贯性。",
                 },
             ]
             messages = prefix + recent_messages
@@ -393,15 +441,50 @@ class GameService:
         character_info: Dict,
         session_id: Optional[str] = None,
         history: Optional[List[Dict]] = None,
+        characters_state: Optional[Dict] = None,
     ) -> tuple[Optional[str], Optional[str]]:
-        """调用 LLM API 生成场景"""
+        """调用 LLM API 生成场景
+
+        如果提供了 characters_state：
+        - 预过滤用户输入中提及的角色，注入到消息中
+        - 启用 tool calling，LLM 可主动查询未提及但需要引用的角色
+        """
         t_start = time.time()
         provider = get_provider()
+
+        # ── 预过滤：扫描用户输入中提及的角色 ──
+        prefiltered_context = ""
+        tools = None
+        tool_handler = None
+
+        if characters_state:
+            matched = _prefilter_characters(user_input, characters_state)
+            if matched:
+                prefiltered_context = _build_character_context(matched)
+                logger.info(
+                    "CHAR_PREFILTER: matched=%d names=%s",
+                    len(matched),
+                    [c["name"] for c in matched],
+                )
+
+            # 创建 tool handler，让 LLM 可以主动查询任何角色
+            cs = characters_state  # capture for closure
+            tool_handler = lambda name, args: _character_tool_handler(
+                name, args, characters_state=cs,
+            )
+            from app.services.llm.deepseek_provider import CHARACTER_TOOLS
+            tools = CHARACTER_TOOLS
+
+        # 将预过滤的角色信息拼入 user_input
+        augmented_input = user_input + prefiltered_context
+
         result = await provider.generate(
             character_info,
-            user_input,
+            augmented_input,
             session_id,
             history=history,
+            tools=tools,
+            tool_handler=tool_handler,
         )
         t_elapsed = time.time() - t_start
         logger.info(
@@ -433,6 +516,16 @@ class GameService:
             )
             return None
 
+        # 先尝试直接 json.loads 整个文本（LLM 按要求输出纯 JSON 时直接命中）
+        try:
+            result = json.loads(raw_text)
+            if isinstance(result, dict) and 'scene_description' in result:
+                logger.info("PARSE_DIRECT: 直接 json.loads 成功")
+                return _validate_and_fill_result(result, raw_text, game_session_id)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # 正则提取最外层 {...}（兜底 LLM 输出含多余文字的情况）
         json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if not json_match:
             logger.warning(
@@ -472,40 +565,6 @@ class GameService:
 
         try:
             result = json.loads(json_str)
-            required = ['scene_description', 'choices', 'game_update']
-            missing = [k for k in required if k not in result]
-            if missing:
-                logger.warning("PARSE: JSON缺少字段 missing=%s json=%s", missing, json_str[:200])
-                return None
-
-            if not isinstance(result['choices'], list) or len(result['choices']) == 0:
-                result['choices'] = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
-
-            if len(result['choices']) < 5:
-                defaults = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
-                for d in defaults:
-                    if len(result['choices']) >= 5:
-                        break
-                    if d not in result['choices']:
-                        result['choices'].append(d)
-
-            game_update = result.setdefault('game_update', {})
-            game_update.setdefault('points_awarded', 5)
-            game_update.setdefault('new_achievement', "")
-
-            # 解析成功，标记日志
-            _log_llm_response(raw_text, game_session_id, success=True)
-
-            t_elapsed = time.time() - t_start
-            logger.info(
-                "PARSE_OK: time=%.3fs scene=%.50s choices=%d points=%d chars=%d",
-                t_elapsed,
-                result['scene_description'][:50],
-                len(result['choices']),
-                game_update.get('points_awarded', 0),
-                len(raw_text),
-            )
-            return result
         except json.JSONDecodeError as e:
             t_elapsed = time.time() - t_start
             logger.exception(
@@ -513,10 +572,47 @@ class GameService:
                 t_elapsed, e, json_str[:200],
             )
             return None
-        except Exception as e:
-            t_elapsed = time.time() - t_start
-            logger.exception("PARSE_UNEXPECTED: time=%.3fs error=%s", t_elapsed, e)
+
+        return _validate_and_fill_result(result, raw_text, game_session_id)
+
+    @staticmethod
+    def _validate_and_fill_result(
+        result: Dict,
+        raw_text: str,
+        game_session_id: int,
+    ) -> Optional[Dict]:
+        """校验并补齐 LLM JSON 响应的字段"""
+        required = ['scene_description', 'choices', 'game_update']
+        missing = [k for k in required if k not in result]
+        if missing:
+            logger.warning("PARSE: JSON缺少字段 missing=%s", missing)
             return None
+
+        if not isinstance(result['choices'], list) or len(result['choices']) == 0:
+            result['choices'] = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
+
+        if len(result['choices']) < 5:
+            defaults = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
+            for d in defaults:
+                if len(result['choices']) >= 5:
+                    break
+                if d not in result['choices']:
+                    result['choices'].append(d)
+
+        game_update = result.setdefault('game_update', {})
+        game_update.setdefault('points_awarded', 5)
+        game_update.setdefault('new_achievement', "")
+
+        _log_llm_response(raw_text, game_session_id, success=True)
+
+        logger.info(
+            "PARSE_OK: scene=%.50s choices=%d points=%d chars=%d",
+            result['scene_description'][:50],
+            len(result['choices']),
+            game_update.get('points_awarded', 0),
+            len(raw_text),
+        )
+        return result
 
     @staticmethod
     def get_fallback_scene(user_action: str) -> Dict:

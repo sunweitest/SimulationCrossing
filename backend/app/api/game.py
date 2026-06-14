@@ -195,12 +195,13 @@ async def perform_action(
             context.total_turns,
         )
 
-    # 调用LLM（使用预组装的 messages）
+    # 调用LLM（使用预组装的 messages，启用按需角色查询）
     raw_response, new_session_id = await GameService.call_llm_api(
         action_data.action,
         character_info,
         game_session.session_id,
         history=context.messages,
+        characters_state=game_session.characters_state,
     )
 
     # 更新session_id
@@ -223,7 +224,7 @@ async def perform_action(
                 action_data.action,
                 len(text),
             )
-            desc = text[:800]
+            desc = text[:2000]  # 匹配 LLM 典型输出长度
             # 轻量调用 LLM 生成贴合场景的选项
             provider = get_provider()
             choices = await provider.generate_choices(desc, character_info)

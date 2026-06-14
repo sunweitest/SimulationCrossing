@@ -4,12 +4,41 @@ import time
 import json
 import logging
 import uuid
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Callable, Awaitable
 from openai import OpenAI
 from app.core.config import settings
 from app.services.llm.base import LLMProvider
 
 logger = logging.getLogger("llm.deepseek")
+
+# ── Tool 定义（DeepSeek function calling）─────────────────
+
+CHARACTER_QUERY_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "query_character",
+        "description": (
+            "查询故事中已出现过的人物的详细信息，"
+            "包括与玩家的关系、好感度（-100到100）、当前状态（存活/死亡/离开）等。"
+            "当你需要在剧情中引用或召回某个人物时，"
+            "务必先调用此工具查询其最新状态，确保人物行为与关系、好感度一致。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "要查询的人物姓名",
+                }
+            },
+            "required": ["name"],
+        },
+    },
+}
+
+CHARACTER_TOOLS = [CHARACTER_QUERY_TOOL]
+
+# ── System Prompt ─────────────────────────────────────────
 
 SYSTEM_PROMPT = """# 角色
 你是一位富有想象力且精通中国历史的"故事大师"，主持一场沉浸式的互动历史小说游戏。你对从秦汉到明清的中国历史、典章制度、社会风俗、军事谋略均有深厚造诣，能精准还原不同时代的历史氛围。
@@ -59,7 +88,7 @@ SYSTEM_PROMPT = """# 角色
 你必须**只输出**一个 JSON 对象，不能有任何前缀文字、后缀文字或 markdown 包裹。直接输出：
 
 {
-  "scene_description": "剧情描述（200-900字）",
+  "scene_description": "剧情描述（200-800字）",
   "choices": ["选项A（10-20字）", "选项B", "选项C", "选项D", "选项E"],
   "game_update": {
     "points_awarded": 5,
@@ -96,8 +125,19 @@ class DeepSeekProvider(LLMProvider):
             user_input: str,
             session_id: Optional[str] = None,
             history: Optional[List[Dict]] = None,
+            tools: Optional[List[Dict]] = None,
+            tool_handler: Optional[Callable[[str, str], Awaitable[str]]] = None,
     ) -> tuple[Optional[str], Optional[str]]:
-        """生成下一段剧情"""
+        """生成下一段剧情
+
+        Args:
+            tools: DeepSeek function calling 工具定义列表
+            tool_handler: async (name, arguments_json) -> result_str，
+                         提供时启用 tool loop，LLM 可主动查询角色信息
+
+        当 tools + tool_handler 同时提供时，自动处理 tool call 循环，
+        直到 LLM 返回最终文本或达到最大迭代次数。
+        """
         effective_background = (
                 character_info.get("dynamic_background") or
                 character_info.get("background", "无")
@@ -105,39 +145,7 @@ class DeepSeekProvider(LLMProvider):
 
         user_message = self._build_user_message(character_info, effective_background, user_input)
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-        if history:
-            # 检测是否有【前情提要】前缀（由 build_conversation_history 注入）
-            has_summary = (
-                    len(history) >= 2
-                    and history[0].get("role") == "user"
-                    and history[0].get("content", "").startswith("【前情提要】")
-            )
-
-            if has_summary:
-                # 保留摘要前缀 + 最近轮（防御性截断）
-                summary_prefix = history[:2]
-                body = history[2:]
-                max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
-                recent_body = body[-max_msgs:] if len(body) > max_msgs else body
-                messages.extend(summary_prefix + recent_body)
-                logger.info(
-                    "DEEPSEEK: 包含摘要前缀+历史 turns=%d",
-                    len(recent_body) // 2,
-                )
-            else:
-                # 无摘要：简单截断
-                max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
-                recent_history = history[-max_msgs:] if len(history) > max_msgs else history
-                messages.extend(recent_history)
-                logger.info(
-                    "DEEPSEEK: 包含历史对话 turns=%d/%d",
-                    len(recent_history) // 2,
-                    len(history) // 2,
-                )
-
-        messages.append({"role": "user", "content": user_message})
+        messages = self._assemble_messages(user_message, history)
 
         # 估算 token 量（中文约 1.5 字符/token）
         total_chars = sum(len(m["content"]) for m in messages)
@@ -145,7 +153,7 @@ class DeepSeekProvider(LLMProvider):
 
         logger.info(
             "DEEPSEEK_REQ: novel=%s character=%s timeline=%s action=%.40s session=%s "
-            "msgs=%d est_tokens=%.0f history_turns=%d",
+            "msgs=%d est_tokens=%.0f history_turns=%d tools=%s",
             character_info["novel"],
             character_info["name"],
             character_info["timeline"],
@@ -154,6 +162,7 @@ class DeepSeekProvider(LLMProvider):
             len(messages),
             estimated_tokens,
             len(history) // 2 if history else 0,
+            "on" if tools else "off",
         )
         logger.debug("DEEPSEEK_USER_MSG: %s", user_message)
 
@@ -176,52 +185,110 @@ class DeepSeekProvider(LLMProvider):
                 i, role, content_len, preview,
             )
 
+        # ── Tool call loop ──────────────────────────────
+        max_tool_rounds = 3
+        use_tools = tools and tool_handler
+
         try:
-            # 使用非流式 + JSON 模式，避免 streaming+JSON 的空白响应问题
-            response = self._client.chat.completions.create(
-                model="deepseek-v4-pro",
-                messages=messages,
-                stream=False,
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-            )
-
-            full_text = response.choices[0].message.content or ""
-            t_total = time.time() - t_start
-
-            # 始终保存原始响应到文件（便于排查）
-            self._save_raw_log(full_text, new_session_id)
-
-            # 输出原始响应（前 200 字符 + 后 50 字符）
-            head = full_text[:200].replace("\n", "\\n")
-            tail = full_text[-50:].replace("\n", "\\n") if len(full_text) > 200 else ""
-            logger.info(
-                "DEEPSEEK_OK: chars=%d time=%.1fs head=%.200s tail=%.50s",
-                len(full_text), t_total, head, tail,
-            )
-
-            # hex dump 前 80 字节，识别空白/隐藏字符
-            hex_head = full_text[:80].encode("utf-8", errors="replace").hex(" ")
-            logger.info("DEEPSEEK_HEX(first80): %s", hex_head)
-
-            # 如果全是空白或不可见字符
-            visible = full_text.strip()
-            if not visible:
-                logger.warning(
-                    "DEEPSEEK_EMPTY: 响应全为空白字符 raw_len=%d time=%.1fs",
-                    len(full_text), t_total,
+            for round_idx in range(max_tool_rounds + 1):
+                response = self._client.chat.completions.create(
+                    model="deepseek-v4-pro",
+                    messages=messages,
+                    stream=False,
+                    temperature=self._temperature,
+                    max_tokens=self._max_tokens,
+                    tools=tools if use_tools else None,
                 )
-                return None, session_id
 
-            cleaned = self._clean_response(full_text)
-            if not cleaned:
-                logger.warning(
-                    "DEEPSEEK_CLEAN_EMPTY: 清理后为空 raw_len=%d cleaned_len=%d",
-                    len(full_text), len(cleaned),
+                msg = response.choices[0].message
+
+                # 无 tool_calls → 最终响应
+                if not msg.tool_calls:
+                    full_text = msg.content or ""
+                    t_total = time.time() - t_start
+
+                    self._save_raw_log(full_text, new_session_id)
+
+                    head = full_text[:200].replace("\n", "\\n")
+                    tail = full_text[-50:].replace("\n", "\\n") if len(full_text) > 200 else ""
+                    logger.info(
+                        "DEEPSEEK_OK: chars=%d time=%.1fs head=%.200s tail=%.50s",
+                        len(full_text), t_total, head, tail,
+                    )
+
+                    hex_head = full_text[:80].encode("utf-8", errors="replace").hex(" ")
+                    logger.info("DEEPSEEK_HEX(first80): %s", hex_head)
+
+                    visible = full_text.strip()
+                    if not visible:
+                        logger.warning(
+                            "DEEPSEEK_EMPTY: 响应全为空白字符 raw_len=%d time=%.1fs",
+                            len(full_text), t_total,
+                        )
+                        return None, session_id
+
+                    cleaned = self._clean_response(full_text)
+                    if not cleaned:
+                        logger.warning(
+                            "DEEPSEEK_CLEAN_EMPTY: 清理后为空 raw_len=%d cleaned_len=%d",
+                            len(full_text), len(cleaned),
+                        )
+                        return None, session_id
+
+                    return cleaned, new_session_id
+
+                # 有 tool_calls → 执行工具，结果喂回 LLM
+                logger.info(
+                    "DEEPSEEK_TOOL_CALLS: round=%d calls=%d",
+                    round_idx, len(msg.tool_calls),
                 )
-                return None, session_id
 
-            return cleaned, new_session_id
+                # 将 assistant 消息（含 tool_calls）加入历史
+                messages.append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                })
+
+                # 执行每个 tool call
+                for tc in msg.tool_calls:
+                    tool_name = tc.function.name
+                    tool_args = tc.function.arguments
+                    try:
+                        result = await tool_handler(tool_name, tool_args)
+                    except Exception as e:
+                        logger.exception(
+                            "TOOL_HANDLER_ERROR: tool=%s args=%s err=%s",
+                            tool_name, tool_args, e,
+                        )
+                        result = json.dumps({"error": str(e)})
+
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": result,
+                    })
+                    logger.info(
+                        "TOOL_RESULT: tool=%s args=%s result_len=%d",
+                        tool_name, tool_args, len(result),
+                    )
+
+            # 超过最大轮次仍未得到最终响应
+            logger.warning(
+                "DEEPSEEK_TOOL_LOOP_EXHAUSTED: max_rounds=%d",
+                max_tool_rounds,
+            )
+            return None, session_id
 
         except Exception as e:
             t_elapsed = time.time() - t_start
@@ -230,6 +297,47 @@ class DeepSeekProvider(LLMProvider):
                 t_elapsed, e,
             )
             return None, session_id
+
+    def _assemble_messages(
+        self,
+        user_message: str,
+        history: Optional[List[Dict]],
+    ) -> List[Dict]:
+        """组装发送给 LLM 的完整消息列表
+
+        提取自 generate() 的消息构建逻辑，方便复用。
+        """
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+        if history:
+            has_summary = (
+                len(history) >= 2
+                and history[0].get("role") == "user"
+                and history[0].get("content", "").startswith("【前情提要】")
+            )
+
+            if has_summary:
+                summary_prefix = history[:2]
+                body = history[2:]
+                max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
+                recent_body = body[-max_msgs:] if len(body) > max_msgs else body
+                messages.extend(summary_prefix + recent_body)
+                logger.info(
+                    "DEEPSEEK: 包含摘要前缀+历史 turns=%d",
+                    len(recent_body) // 2,
+                )
+            else:
+                max_msgs = settings.DEEPSEEK_MAX_HISTORY_TURNS * 2
+                recent_history = history[-max_msgs:] if len(history) > max_msgs else history
+                messages.extend(recent_history)
+                logger.info(
+                    "DEEPSEEK: 包含历史对话 turns=%d/%d",
+                    len(recent_history) // 2,
+                    len(history) // 2,
+                )
+
+        messages.append({"role": "user", "content": user_message})
+        return messages
 
     @staticmethod
     def _save_raw_log(raw_text: str, session_id: str) -> None:
