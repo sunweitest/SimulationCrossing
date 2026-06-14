@@ -1,5 +1,4 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
@@ -22,10 +21,21 @@ const routes = [
     component: () => import('@/views/CharacterCreateView.vue')
   },
   {
-    path: '/game',
+    path: '/game/:id?',
     name: 'Game',
     component: () => import('@/views/GameView.vue'),
     meta: { requiresGame: true }
+  },
+  {
+    path: '/my-games',
+    name: 'MyGames',
+    component: () => import('@/views/MyGamesView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: () => import('@/views/AdminView.vue')
   }
 ]
 
@@ -36,16 +46,25 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach((to, from, next) => {
+  const authStore = useAuthStore()
   const gameStore = useGameStore()
 
-  if (to.meta.requiresGame && !gameStore.currentSession) {
-    next('/character-create')
-  } else {
-    next()
+  // 需要登录的页面
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    next('/login')
+    return
   }
+
+  // 需要游戏会话：无 id 参数时必须已有 currentSession；有 id 参数时放行
+  if (to.meta.requiresGame && !to.params.id && !gameStore.currentSession) {
+    next('/character-create')
+    return
+  }
+
+  next()
 })
 
 export default router
 
-// 需要导入store
+import { useAuthStore } from '@/stores/auth'
 import { useGameStore } from '@/stores/game'

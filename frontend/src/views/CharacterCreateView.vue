@@ -1,6 +1,18 @@
 <template>
   <div class="container">
+    <!-- 认证栏 -->
+    <div v-if="!authStore.isAuthenticated" class="auth-bar">
+      <span class="auth-hint">登录后可查看和管理游戏存档</span>
+      <div class="auth-buttons">
+        <button class="btn btn-primary btn-sm" @click="showAuthModal = true; authModalTab = 'login'">登录</button>
+        <button class="btn btn-sm" @click="showAuthModal = true; authModalTab = 'register'">注册</button>
+      </div>
+    </div>
+
     <h1>🎭 角色创建</h1>
+
+    <!-- 登录/注册弹窗 -->
+    <AuthModal v-model:visible="showAuthModal" :initial-tab="authModalTab" />
 
     <section class="world-visual" :style="{ backgroundImage: `url(${currentWorldImage.src})` }">
       <div class="world-visual-overlay">
@@ -21,6 +33,7 @@
             <option value="水浒传">水浒传</option>
             <option value="明代">明代</option>
             <option value="清代">清代</option>
+            <option value="西游记">西游记</option>
           </select>
         </div>
 
@@ -76,7 +89,7 @@
 
             <div class="input-group">
               <label>年龄</label>
-              <input v-model.number="form.age" type="number" class="input" min="18" max="120" />
+              <input v-model.number="form.age" type="number" class="input" min="18" />
             </div>
           </div>
 
@@ -160,14 +173,21 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import { useAuthStore } from '@/stores/auth'
 import { gameAPI } from '@/api'
+import AuthModal from '@/components/AuthModal.vue'
 import sanguoImage from '../../../images/sanguo.png'
 import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
+import xiyouImage from '../../../images/xiyou.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
+const authStore = useAuthStore()
+
+const showAuthModal = ref(false)
+const authModalTab = ref('login')
 
 const characterType = ref('preset')
 const selectedPresetCharacter = ref('')
@@ -191,7 +211,8 @@ const timelineMap = {
   '三国演义': ['黄巾起义', '董卓乱政', '官渡之战', '赤壁之战', '三国鼎立', '北伐中原'],
   '水浒传': ['洪太尉访道', '梁山聚义', '攻打祝家庄', '招安之路', '征讨方腊', '卸甲还乡'],
   '明代': ['洪武之治', '靖难之役', '永乐盛世', '土木堡之变', '万历乱局', '女真崛起', '闯王进京'],
-  '清代': ['八旗入关', '康熙继位', '九子夺嫡', '马戛尔尼访华', '虎门销烟', '金田起义', '第二次中英战争', '洋务运动', '甲午战争', '八国联军进京', '预备立宪']
+  '清代': ['八旗入关', '康熙继位', '九子夺嫡', '马戛尔尼访华', '虎门销烟', '金田起义', '第二次中英战争', '洋务运动', '甲午战争', '八国联军进京', '预备立宪'],
+  '西游记': ['大闹天宫', '五行山下', '西天取经', '三打白骨精', '女儿国', '真假美猴王', '火焰山', '取得真经']
 }
 
 // 从API加载的角色详情缓存
@@ -213,6 +234,10 @@ const worldImageMap = {
   '清代': {
     src: hongloumengImage,
     caption: '盛世帘影，旧梦将醒'
+  },
+  '西游记': {
+    src: xiyouImage,
+    caption: '西行路上，妖雾重重'
   }
 }
 
@@ -308,7 +333,7 @@ const formatApiError = (err) => {
   const detail = err.response?.data?.detail
   if (Array.isArray(detail)) {
     const ageError = detail.find(item => item.loc?.includes('age'))
-    if (ageError) return '年龄请输入 18 到 120 之间的数字'
+    if (ageError) return '年龄请输入 18 岁以上的数字'
     return detail.map(item => item.msg).join('；')
   }
   return typeof detail === 'string' ? detail : detail?.message || '创建游戏会话失败'
@@ -325,8 +350,8 @@ const startGame = async () => {
   const age = characterType.value === 'preset' && selectedPresetInfo.value
     ? Number(selectedPresetInfo.value.age)
     : Number(form.value.age)
-  if (!Number.isFinite(age) || age < 18 || age > 120) {
-    error.value = '年龄请输入 18 到 120 之间的数字'
+  if (!Number.isFinite(age) || age < 18) {
+    error.value = '年龄请输入 18 岁以上的数字'
     return
   }
 
@@ -359,6 +384,29 @@ const startGame = async () => {
 </script>
 
 <style scoped>
+/* 认证栏 */
+.auth-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.auth-hint {
+  color: var(--text-light);
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .world-visual {
   min-height: 260px;
   margin-bottom: 2rem;

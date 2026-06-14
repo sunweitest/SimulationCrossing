@@ -1,15 +1,17 @@
+import time
 import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_active_user
 from app.models.models import User, GameSession, SceneHistory, ChoiceHistory
 from app.schemas.schemas import (
     GameSessionCreate, GameSessionResponse, UserAction,
-    Scene, GameStateResponse
+    Scene, GameStateResponse, GameSessionListItem,
+    CharacterInfoResponse, CharacterEntry,
 )
-from app.services.game_service import GameService
+from app.services.game_service import GameService, get_provider
 from typing import Optional
 
 logger = logging.getLogger("game_api")
@@ -129,7 +131,8 @@ async def perform_action(
     current_user: Optional[User] = Depends(get_current_user)
 ):
     """执行游戏行动"""
-    logger.info("ACTION: session_id=%d action=%s user=%s",
+    t_total_start = time.time()
+    logger.info("ACTION_START: session_id=%d action=%.40s user=%s",
                 action_data.game_session_id, action_data.action,
                 current_user.id if current_user else "guest")
 
@@ -208,10 +211,37 @@ async def perform_action(
     # 解析响应
     new_scene = None
     if raw_response:
-        new_scene = GameService.parse_llm_response(raw_response)
+        new_scene = GameService.parse_llm_response(raw_response, game_session_id=action_data.game_session_id)
 
+    # 智能降级：JSON 解析失败但有有效文本 → 用 AI 文本作场景描述 + LLM 生成选项
+    if not new_scene and raw_response:
+        text = raw_response.strip()
+        if text and not text.isspace():
+            logger.info(
+                "ACTION_SMART_FALLBACK: JSON解析失败 session=%d action=%.40s text_len=%d",
+                action_data.game_session_id,
+                action_data.action,
+                len(text),
+            )
+            desc = text[:800]
+            # 轻量调用 LLM 生成贴合场景的选项
+            provider = get_provider()
+            choices = await provider.generate_choices(desc, character_info)
+            new_scene = {
+                "scene_description": desc,
+                "choices": choices,
+                "game_update": {"points_awarded": 5, "new_achievement": ""},
+            }
+
+    # 最终兜底：完全没有有效响应
     if not new_scene:
-        logger.warning("ACTION: 使用fallback场景 raw_response_is_none=%s", raw_response is None)
+        logger.warning(
+            "ACTION_HARD_FALLBACK: session=%d action=%.40s raw_is_none=%s raw_len=%d",
+            action_data.game_session_id,
+            action_data.action,
+            raw_response is None,
+            len(raw_response) if raw_response else 0,
+        )
         new_scene = GameService.get_fallback_scene(action_data.action)
 
     # 更新游戏状态
@@ -244,6 +274,16 @@ async def perform_action(
 
     await db.commit()
     await db.refresh(game_session)
+
+    t_total = time.time() - t_total_start
+    logger.info(
+        "ACTION_DONE: session_id=%d action=%.30s time=%.1fs points=%d achievements=%d",
+        action_data.game_session_id,
+        action_data.action,
+        t_total,
+        game_session.points,
+        len(game_session.achievements) if game_session.achievements else 0,
+    )
 
     return Scene(**new_scene)
 
@@ -293,6 +333,73 @@ async def get_game_session(
     return game_session
 
 
+@router.delete("/session/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_game_session(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """删除游戏会话"""
+    result = await db.execute(
+        select(GameSession).where(GameSession.id == session_id)
+    )
+    game_session = result.scalar_one_or_none()
+
+    if not game_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="游戏会话不存在"
+        )
+
+    if game_session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权删除此游戏会话"
+        )
+
+    await db.delete(game_session)
+    await db.commit()
+
+
+@router.get("/sessions", response_model=list[GameSessionListItem])
+async def list_game_sessions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """获取当前用户的所有游戏会话"""
+    result = await db.execute(
+        select(GameSession)
+        .where(GameSession.user_id == current_user.id)
+        .order_by(GameSession.updated_at.desc())
+    )
+    sessions = result.scalars().all()
+
+    return [
+        GameSessionListItem(
+            id=s.id,
+            character_name=s.character_name,
+            character_gender=s.character_gender,
+            character_age=s.character_age,
+            character_rank=s.character_rank,
+            novel=s.novel,
+            timeline=s.timeline,
+            character_type=s.character_type,
+            points=s.points,
+            achievements=s.achievements or [],
+            current_scene_desc=(
+                s.current_scene["scene_description"][:80] + "..."
+                if s.current_scene
+                and isinstance(s.current_scene, dict)
+                and s.current_scene.get("scene_description")
+                else None
+            ),
+            created_at=s.created_at,
+            updated_at=s.updated_at,
+        )
+        for s in sessions
+    ]
+
+
 @router.get("/session/{session_id}/state", response_model=GameStateResponse)
 async def get_game_state(
     session_id: int,
@@ -328,4 +435,62 @@ async def get_game_state(
         scene_count=scene_count,
         choice_count=choice_count,
         current_scene=game_session.current_scene
+    )
+
+
+# ── 角色追踪查询 ──────────────────────────────────────────
+
+@router.get("/session/{session_id}/characters", response_model=CharacterInfoResponse)
+async def get_session_characters(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取游戏会话中所有已追踪的角色及其好感度"""
+    result = await db.execute(
+        select(GameSession).where(GameSession.id == session_id)
+    )
+    game_session = result.scalar_one_or_none()
+
+    if not game_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="游戏会话不存在",
+        )
+
+    state = game_session.characters_state or {}
+    characters = state.get("characters", [])
+    return CharacterInfoResponse(
+        session_id=session_id,
+        total_characters=len(characters),
+        characters=[CharacterEntry(**c) for c in characters],
+        last_updated_turn=state.get("last_updated_turn", 0),
+    )
+
+
+@router.get("/session/{session_id}/character/{character_name}")
+async def get_session_character(
+    session_id: int,
+    character_name: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """按名字查询游戏会话中的特定角色"""
+    result = await db.execute(
+        select(GameSession).where(GameSession.id == session_id)
+    )
+    game_session = result.scalar_one_or_none()
+
+    if not game_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="游戏会话不存在",
+        )
+
+    state = game_session.characters_state or {}
+    for char in state.get("characters", []):
+        if char.get("name") == character_name:
+            return CharacterEntry(**char)
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"角色 '{character_name}' 未找到",
     )

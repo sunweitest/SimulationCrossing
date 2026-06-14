@@ -17,6 +17,7 @@ class DashScopeProvider(LLMProvider):
             "水浒传": settings.SHUIHU_APP_ID,
             "明代": settings.MINGDAI_APP_ID,
             "清代": settings.QINGDAI_APP_ID,
+            "西游记": settings.XIYOU_APP_ID,
         }
 
     async def generate(

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     SANGUO_APP_ID: str = ""
     MINGDAI_APP_ID: str = ""
     QINGDAI_APP_ID: str = ""
+    XIYOU_APP_ID: str = ""
 
     # DeepSeek API配置（仅 LLM_PROVIDER=deepseek 时需要）
     DEEPSEEK_API_KEY: str = ""
@@ -37,18 +38,25 @@ class Settings(BaseSettings):
     # DeepSeek 模型参数
     DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意
     DEEPSEEK_MAX_TOKENS: int = 4096          # 最大输出 token 数
-    DEEPSEEK_MAX_HISTORY_TURNS: int = 8      # 保留的最近对话轮数
+    DEEPSEEK_MAX_HISTORY_TURNS: int = 5      # 保留的最近对话轮数（减少上下文减少出错）
 
     # 上下文压缩配置
-    CONTEXT_COMPRESSION_THRESHOLD: int = 10  # 触发压缩的对话轮数阈值
-    CONTEXT_RECENT_TURNS: int = 5            # 压缩后保留的最近完整轮数
+    CONTEXT_COMPRESSION_THRESHOLD: int = 6   # 触发压缩的对话轮数阈值（超过此值开始压缩旧轮）
+    CONTEXT_RECENT_TURNS: int = 3            # 压缩后保留的最近完整轮数
+
+    # 角色追踪配置
+    CHARACTER_EXTRACTION_MODEL: str = "deepseek-v4-flash"  # 角色提取使用的模型
+    CHARACTER_EXTRACTION_TEMPERATURE: float = 0.2          # 低温度确保结构化输出
 
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
 
     # 次数限制配置
     DAILY_FREE_MESSAGES: int = 26
-    DAILY_LOGGED_IN_EXTRA: int = 10
+    DAILY_LOGGED_IN_EXTRA: int = 36
+
+    # 管理后台
+    ADMIN_KEY: str = "admin-secret-change-me"
 
     class Config:
         env_file = ".env"

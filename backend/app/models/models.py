@@ -46,6 +46,9 @@ class GameSession(Base):
     running_summary = Column(Text, nullable=True)  # 压缩后的故事概要
     summary_turn_count = Column(Integer, default=0)  # 已压缩的对话轮数
 
+    # 结构化角色追踪
+    characters_state = Column(JSON, nullable=True)  # {"characters": [...], "last_updated_turn": N}
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

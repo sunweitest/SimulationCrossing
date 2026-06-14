@@ -13,17 +13,13 @@ class LLMProvider(ABC):
         session_id: Optional[str] = None,
         history: Optional[List[Dict]] = None,
     ) -> tuple[Optional[str], Optional[str]]:
-        """生成剧情文本
-
-        Args:
-            character_info: 角色信息字典 (name, rank, background, novel, timeline, dynamic_background)
-            user_input: 玩家输入的行动
-            session_id: 上次对话的 session_id（多轮对话上下文）
-            history: 对话历史列表 [{"role": "user"|"assistant", "content": "..."}]
-
-        Returns:
-            (response_text, new_session_id)
-            response_text: LLM 原始响应文本，传给 parse_llm_response 解析
-            new_session_id: 新的 session_id，下次调用传入
-        """
+        """生成剧情文本"""
         ...
+
+    async def generate_choices(
+        self,
+        scene_description: str,
+        character_info: Dict,
+    ) -> list[str]:
+        """根据场景生成行动选项（可选覆盖，默认返回通用选项）"""
+        return ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]

@@ -102,6 +102,11 @@ body {
   display: block;
 }
 
+.btn-sm {
+  padding: 0.4rem 1rem;
+  font-size: 0.875rem;
+}
+
 /* 输入框 */
 .input {
   width: 100%;

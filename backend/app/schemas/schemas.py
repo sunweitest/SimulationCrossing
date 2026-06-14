@@ -41,7 +41,7 @@ class CharacterCreate(BaseModel):
     """角色创建"""
     name: str
     gender: str
-    age: int = Field(..., ge=18, le=120)
+    age: int = Field(..., ge=18)
     rank: str
     background: Optional[str] = None
     novel: str  # 三国演义/水浒传/明代/清代
@@ -103,6 +103,7 @@ class GameSessionResponse(BaseModel):
     points: int
     achievements: List[str]
     current_scene: Optional[dict]
+    characters_state: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 
@@ -119,6 +120,26 @@ class GameStateResponse(BaseModel):
     current_scene: Optional[dict]
 
 
+class GameSessionListItem(BaseModel):
+    """游戏会话列表项"""
+    id: int
+    character_name: str
+    character_gender: str
+    character_age: int
+    character_rank: str
+    novel: str
+    timeline: str
+    character_type: str
+    points: int
+    achievements: List[str]
+    current_scene_desc: Optional[str] = None  # 场景描述预览（前80字）
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ===== 使用限制相关 =====
 class UsageLimitResponse(BaseModel):
     """使用限制响应"""
@@ -126,3 +147,29 @@ class UsageLimitResponse(BaseModel):
     daily_limit: int
     is_logged_in: bool
     needs_login: bool = False
+
+
+# ===== 角色追踪相关 =====
+class CharacterEntry(BaseModel):
+    """单个角色追踪条目"""
+    name: str
+    identity: str = ""
+    relationship_to_player: str = ""
+    favorability: int = Field(default=0, ge=-100, le=100)
+    status: str = "存活"
+    last_interaction: Optional[str] = None
+    first_appeared_turn: Optional[int] = None
+
+
+class CharactersState(BaseModel):
+    """角色追踪状态"""
+    characters: List[CharacterEntry] = Field(default_factory=list)
+    last_updated_turn: int = 0
+
+
+class CharacterInfoResponse(BaseModel):
+    """角色查询响应"""
+    session_id: int
+    total_characters: int
+    characters: List[CharacterEntry]
+    last_updated_turn: int

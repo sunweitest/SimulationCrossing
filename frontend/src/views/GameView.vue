@@ -66,7 +66,11 @@
           </div>
         </div>
 
-        <button @click="newGame" class="btn btn-secondary btn-block mt-3">
+        <router-link v-if="authStore.isAuthenticated" to="/my-games" class="btn btn-block mt-2" style="text-align:center;text-decoration:none;">
+          📋 我的游戏
+        </router-link>
+
+        <button @click="newGame" class="btn btn-secondary btn-block mt-2">
           重新开始游戏
         </button>
       </div>
@@ -153,15 +157,19 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import { useAuthStore } from '@/stores/auth'
 import sanguoImage from '../../../images/sanguo.png'
 import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
+import xiyouImage from '../../../images/xiyou.png'
 
 const router = useRouter()
+const route = useRoute()
 const gameStore = useGameStore()
+const authStore = useAuthStore()
 
 const customAction = ref('')
 const error = ref('')
@@ -174,7 +182,8 @@ const worldImageMap = {
   '三国演义': { src: sanguoImage },
   '水浒传': { src: shuihuImage },
   '明代': { src: mingdaiImage },
-  '清代': { src: hongloumengImage }
+  '清代': { src: hongloumengImage },
+  '西游记': { src: xiyouImage }
 }
 const currentWorldImage = computed(() => worldImageMap[gameStore.currentSession?.novel])
 
@@ -192,7 +201,19 @@ const typewriterEffect = (text) => {
   }, 20)
 }
 
-onMounted(() => {
+onMounted(async () => {
+  const sessionId = route.params.id
+
+  // 继续游戏：从 URL 参数加载会话
+  if (sessionId) {
+    try {
+      await gameStore.loadExistingSession(Number(sessionId))
+    } catch (err) {
+      error.value = '无法加载游戏会话，会话可能不存在或无权访问'
+      return
+    }
+  }
+
   if (!gameStore.currentSession) {
     router.push('/character-create')
     return

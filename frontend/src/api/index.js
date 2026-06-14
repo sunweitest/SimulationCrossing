@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000
+  timeout: 160000  // LLM 生成剧情可能较慢
 })
 
 // 请求拦截器 - 添加token
@@ -42,8 +42,25 @@ export const gameAPI = {
   performAction: (data) => api.post('/game/action', data),
   getSession: (id) => api.get(`/game/session/${id}`),
   getGameState: (id) => api.get(`/game/session/${id}/state`),
+  getSessions: () => api.get('/game/sessions'),
+  deleteSession: (id) => api.delete(`/game/session/${id}`),
   getCharacters: (params) => api.get('/game/characters', { params }),
   getCharacterDetail: (novel, name, timeline) => api.get(`/game/character/${encodeURIComponent(novel)}/${encodeURIComponent(name)}`, { params: { timeline } })
+}
+
+// 管理后台 API（需要 X-Admin-Key 请求头）
+export const adminAPI = {
+  lookupUser: (q, adminKey) =>
+    api.get('/admin/lookup', { params: { q }, headers: { 'X-Admin-Key': adminKey } }),
+
+  addQuota: (userId, amount, adminKey) =>
+    api.post('/admin/add-quota', null, { params: { user_id: userId, amount }, headers: { 'X-Admin-Key': adminKey } }),
+
+  setUnlimited: (userId, adminKey) =>
+    api.post('/admin/monthly-unlimited', null, { params: { user_id: userId }, headers: { 'X-Admin-Key': adminKey } }),
+
+  cancelUnlimited: (userId, adminKey) =>
+    api.delete('/admin/monthly-unlimited', { params: { user_id: userId }, headers: { 'X-Admin-Key': adminKey } }),
 }
 
 export default api

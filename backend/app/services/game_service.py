@@ -1,6 +1,9 @@
 import re
+import time
 import json
 import logging
+from datetime import datetime
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Dict, List
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +15,22 @@ from app.models.models import PresetCharacter, CharacterTimeline, SceneHistory, 
 from app.services.llm.base import LLMProvider
 
 logger = logging.getLogger("game_service")
+
+# LLM 原始响应日志文件
+_LLM_LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
+_LLM_LOG_DIR.mkdir(exist_ok=True)
+
+
+def _log_llm_response(raw_text: str, session_id: int, success: bool) -> None:
+    """将 LLM 原始响应写入日志文件，便于排查解析问题"""
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    status = "ok" if success else "err"
+    filename = _LLM_LOG_DIR / f"llm_{ts}_{status}_session{session_id}.txt"
+    try:
+        filename.write_text(raw_text, encoding="utf-8")
+        logger.info("LLM_LOG: 原始响应已写入 %s (%d chars)", filename.name, len(raw_text))
+    except Exception as e:
+        logger.warning("LLM_LOG: 写入失败 %s", e)
 
 
 def _get_provider() -> LLMProvider:
@@ -42,6 +61,54 @@ class ConversationContext:
     total_turns: int = 0
     needs_compression: bool = False
     turns_for_compression: List[Dict] = field(default_factory=list)
+
+
+def _favorability_label(score: int) -> str:
+    """将好感度数值转换为中文标签"""
+    if score >= 80:
+        return "深厚信任"
+    elif score >= 50:
+        return "友善"
+    elif score >= 20:
+        return "略有好感"
+    elif score > -20:
+        return "中立"
+    elif score > -50:
+        return "冷淡/不满"
+    elif score > -80:
+        return "敌视"
+    else:
+        return "深仇大恨"
+
+
+def _build_character_reference(characters_state: Optional[Dict]) -> str:
+    """从角色追踪 JSON 构建【当前人物关系】文本块
+
+    供 build_conversation_history 注入到 LLM 对话历史中。
+    """
+    if not characters_state:
+        return ""
+
+    chars = characters_state.get("characters", [])
+    if not chars:
+        return ""
+
+    lines = []
+    for c in chars:
+        fav = c.get("favorability", 0)
+        label = _favorability_label(fav)
+        lines.append(
+            f"- {c['name']}（{c.get('identity', '未知')}）："
+            f"与你的关系为「{c.get('relationship_to_player', '未知')}」"
+            f"、好感度 {fav}（{label}）"
+            f"、状态 {c.get('status', '存活')}"
+        )
+
+    return (
+        "\n\n【当前人物关系】请记住以下角色关系及好感度，"
+        "在故事中保持人物行为与关系、好感度一致：\n"
+        + "\n".join(lines)
+    )
 
 
 class GameService:
@@ -193,6 +260,9 @@ class GameService:
 
         if running_summary:
             # 有摘要：前缀 + 最近轮
+            # 构建人物关系引用（如果存在）
+            char_ref = _build_character_reference(session.characters_state)
+
             prefix = [
                 {
                     "role": "user",
@@ -200,11 +270,12 @@ class GameService:
                         "【前情提要】以下是之前发生的主要事件的概要，"
                         "请记住这些信息以保持故事连贯性：\n\n"
                         f"{running_summary}"
+                        f"{char_ref}"
                     ),
                 },
                 {
                     "role": "assistant",
-                    "content": "我已了解之前的故事背景，会保持情节的连贯性。",
+                    "content": "我已了解之前的故事背景和人物关系，会保持情节的连贯性。",
                 },
             ]
             messages = prefix + recent_messages
@@ -255,6 +326,7 @@ class GameService:
         from app.services.context_compressor import (
             build_summary_prompt,
             call_summarization,
+            extract_characters,
         )
 
         try:
@@ -273,6 +345,31 @@ class GameService:
                     session.summary_turn_count = (
                         total_turns - settings.CONTEXT_RECENT_TURNS
                     )
+
+                    # ── 角色提取（独立于摘要，失败不影响摘要存储）──
+                    try:
+                        existing_state = session.characters_state
+                        char_state = await extract_characters(
+                            new_summary, existing_state
+                        )
+                        if char_state:
+                            char_state["last_updated_turn"] = (
+                                session.summary_turn_count
+                            )
+                            session.characters_state = char_state
+                            logger.info(
+                                "CHARACTERS_UPDATED: session=%d count=%d turn=%d",
+                                game_session_id,
+                                len(char_state.get("characters", [])),
+                                char_state["last_updated_turn"],
+                            )
+                    except Exception as e:
+                        logger.exception(
+                            "CHARACTERS_EXTRACT_FAILED: session=%d err=%s",
+                            game_session_id, e,
+                        )
+                    # ──────────────────────────────────────────
+
                     await db.commit()
                     logger.info(
                         "COMPRESS_OK: session=%d turns_compressed=%d summary_chars=%d",
@@ -298,27 +395,81 @@ class GameService:
         history: Optional[List[Dict]] = None,
     ) -> tuple[Optional[str], Optional[str]]:
         """调用 LLM API 生成场景"""
+        t_start = time.time()
         provider = get_provider()
-        return await provider.generate(
+        result = await provider.generate(
             character_info,
             user_input,
             session_id,
             history=history,
         )
+        t_elapsed = time.time() - t_start
+        logger.info(
+            "LLM_CALL: time=%.1fs provider=%s success=%s",
+            t_elapsed,
+            settings.LLM_PROVIDER,
+            result[0] is not None,
+        )
+        return result
 
     @staticmethod
-    def parse_llm_response(raw_text: str) -> Optional[Dict]:
+    def parse_llm_response(raw_text: str, game_session_id: int = 0) -> Optional[Dict]:
         """解析 LLM 返回的 JSON"""
+        t_start = time.time()
+
         if not raw_text:
-            logger.warning("PARSE: raw_text为空")
+            logger.warning("PARSE: raw_text为空（None或空字符串）")
+            return None
+
+        # 始终保存原始响应到日志文件
+        _log_llm_response(raw_text, game_session_id, success=False)
+
+        # 若原始响应全是空白，记录 hex
+        if raw_text.isspace():
+            hex_preview = raw_text[:100].encode("utf-8").hex(" ")
+            logger.warning(
+                "PARSE: 原始响应全是空白字符 len=%d hex前100字节=%s",
+                len(raw_text), hex_preview,
+            )
             return None
 
         json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if not json_match:
-            logger.warning("PARSE: 未找到JSON对象 raw_text前100字符=%s", raw_text[:100])
+            logger.warning(
+                "PARSE: 未找到JSON对象 len=%d 前100字符=%.100s 后100字符=%.100s",
+                len(raw_text),
+                raw_text[:100].replace("\n", "\\n"),
+                raw_text[-100:].replace("\n", "\\n"),
+            )
             return None
 
         json_str = json_match.group()
+
+        # 预处理：只转义 JSON 字符串值内部的非法控制字符，不动 JSON 结构
+        def _sanitize_json(s: str) -> str:
+            def _escape_inner(m: re.Match) -> str:
+                content = m.group(1)
+                buf = []
+                for ch in content:
+                    cp = ord(ch)
+                    if cp < 0x20:
+                        if ch == '\n':
+                            buf.append('\\n')
+                        elif ch == '\r':
+                            buf.append('\\r')
+                        elif ch == '\t':
+                            buf.append('\\t')
+                        else:
+                            buf.append(f'\\u{cp:04x}')
+                    else:
+                        buf.append(ch)
+                return '"' + ''.join(buf) + '"'
+
+            # 匹配 JSON 字符串值 "..."，处理内部转义
+            return re.sub(r'"((?:[^"\\]|\\.)*)"', _escape_inner, s)
+
+        json_str = _sanitize_json(json_str)
+
         try:
             result = json.loads(json_str)
             required = ['scene_description', 'choices', 'game_update']
@@ -330,7 +481,6 @@ class GameService:
             if not isinstance(result['choices'], list) or len(result['choices']) == 0:
                 result['choices'] = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
 
-            # 确保恰好 5 个选项
             if len(result['choices']) < 5:
                 defaults = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
                 for d in defaults:
@@ -343,18 +493,29 @@ class GameService:
             game_update.setdefault('points_awarded', 5)
             game_update.setdefault('new_achievement', "")
 
+            # 解析成功，标记日志
+            _log_llm_response(raw_text, game_session_id, success=True)
+
+            t_elapsed = time.time() - t_start
             logger.info(
-                "PARSE_OK: scene=%s choices=%d points=%d",
+                "PARSE_OK: time=%.3fs scene=%.50s choices=%d points=%d chars=%d",
+                t_elapsed,
                 result['scene_description'][:50],
                 len(result['choices']),
                 game_update.get('points_awarded', 0),
+                len(raw_text),
             )
             return result
         except json.JSONDecodeError as e:
-            logger.exception("PARSE_JSON_ERROR: %s json_str前200字符=%s", e, json_str[:200])
+            t_elapsed = time.time() - t_start
+            logger.exception(
+                "PARSE_JSON_ERROR: time=%.3fs error=%s json前200字符=%s",
+                t_elapsed, e, json_str[:200],
+            )
             return None
         except Exception as e:
-            logger.exception("PARSE_UNEXPECTED: %s", e)
+            t_elapsed = time.time() - t_start
+            logger.exception("PARSE_UNEXPECTED: time=%.3fs error=%s", t_elapsed, e)
             return None
 
     @staticmethod

@@ -5,6 +5,7 @@
         <div class="header-content">
           <h2>🎮 AI穿越模拟</h2>
           <div class="user-info">
+            <router-link to="/my-games" class="header-link">我的游戏</router-link>
             <span>{{ authStore.user?.email || authStore.user?.phone }}</span>
             <button @click="handleLogout" class="btn btn-secondary">退出</button>
           </div>
@@ -58,6 +59,20 @@ const handleLogout = () => {
   display: flex;
   align-items: center;
   gap: 1rem;
+}
+
+.header-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0.25rem 0.75rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.header-link:hover {
+  background: var(--accent-color);
+  color: white;
 }
 
 .app-main {
