@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # DeepSeek 模型参数
     DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意
-    DEEPSEEK_MAX_TOKENS: int = 4096          # 最大输出 token 数
+    DEEPSEEK_MAX_TOKENS: int = 2096          # 最大输出 token 数
     DEEPSEEK_MAX_HISTORY_TURNS: int = 5      # 保留的最近对话轮数（减少上下文减少出错）
 
     # 上下文压缩配置

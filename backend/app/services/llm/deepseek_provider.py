@@ -88,8 +88,8 @@ SYSTEM_PROMPT = """# 角色
 你必须**只输出**一个 JSON 对象，不能有任何前缀文字、后缀文字或 markdown 包裹。直接输出：
 
 {
-  "scene_description": "剧情描述（200-800字）",
-  "choices": ["选项A（10-20字）", "选项B", "选项C", "选项D", "选项E"],
+  "scene_description": "剧情描述（500字以内）",
+  "choices": ["选项A（20字以内）", "选项B", "选项C", "选项D", "选项E"],
   "game_update": {
     "points_awarded": 5,
     "new_achievement": "成就名称（没有则留空字符串）"
@@ -100,7 +100,7 @@ SYSTEM_PROMPT = """# 角色
 - 你的回复必须以 `{` 开头，以 `}` 结尾，中间不能有任何非 JSON 内容。
 - scene_description 中不要包含选项列表，选项只出现在 choices 数组中。
 - scene_description 内的双引号必须转义为 \\\"，换行必须转义为 \\n。
-- 每轮都要提供恰好5个选项，不要多也不要少。"""
+- 选项数1-5个"""
 
 
 class DeepSeekProvider(LLMProvider):
@@ -441,8 +441,8 @@ class DeepSeekProvider(LLMProvider):
 当前场景：
 {scene_description[:600]}
 
-请根据以上场景，为玩家生成5个有意义且导向不同分支的行动选项。
-要求：每个选项10-20字，简洁有力。只输出一个数组，用于python解析成列表。如: ["选项A", "选项B", "选项C", "选项D", "选项E"]，不要其他额外内容。"""
+请根据以上场景，为玩家生成有意义且导向不同分支的行动选项。
+要求：每个选项26字以内，简洁有力。只输出一个数组，用于python解析成列表。如: ["选项A", "选项B", "选项C", "选项D", "选项E"]，不要其他额外内容。"""
 
         try:
             response = self._client.chat.completions.create(
