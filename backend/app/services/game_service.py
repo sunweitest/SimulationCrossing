@@ -521,7 +521,7 @@ class GameService:
             result = json.loads(raw_text)
             if isinstance(result, dict) and 'scene_description' in result:
                 logger.info("PARSE_DIRECT: 直接 json.loads 成功")
-                return _validate_and_fill_result(result, raw_text, game_session_id)
+                return GameService._validate_and_fill_result(result, raw_text, game_session_id)
         except (json.JSONDecodeError, ValueError):
             pass
 
@@ -573,7 +573,7 @@ class GameService:
             )
             return None
 
-        return _validate_and_fill_result(result, raw_text, game_session_id)
+        return GameService._validate_and_fill_result(result, raw_text, game_session_id)
 
     @staticmethod
     def _validate_and_fill_result(
