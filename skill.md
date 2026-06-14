@@ -1,6 +1,6 @@
 ---
 name: my-skill
-description: 运行代码时
+description: 运行代码时、迁移数据表结构
 license: Apache-2.0
 compatibility: 需要 Python 3.10+
 metadata:
@@ -9,10 +9,10 @@ metadata:
 ---
 
 # 技能名称
+运行python代码
+数据迁移
 
-运行python代码，请使用python虚拟环境
-
-## 第一步
+## 运行python代码
 
 | 虚拟环境路径       | `E:\pythonProject\InteractiveNovel\novel\`                   |
 | ------------ | ------------------------------------------------------------ |
@@ -20,3 +20,6 @@ metadata:
 | pip 路径       | `E:\pythonProject\InteractiveNovel\novel\Scripts\pip.exe`    |
 
 
+## 迁移数据
+cd backend
+E:\pythonProject\InteractiveNovel\novel\Scripts\python.exe -m alembic upgrade head
