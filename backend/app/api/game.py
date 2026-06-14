@@ -224,7 +224,7 @@ async def perform_action(
                 action_data.action,
                 len(text),
             )
-            desc = text[:2000]  # 匹配 LLM 典型输出长度
+            desc = text[:6000]  # 匹配 LLM 典型输出长度
             # 轻量调用 LLM 生成贴合场景的选项
             provider = get_provider()
             choices = await provider.generate_choices(desc, character_info)

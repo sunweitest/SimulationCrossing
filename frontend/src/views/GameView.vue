@@ -188,15 +188,24 @@ const worldImageMap = {
 const currentWorldImage = computed(() => worldImageMap[gameStore.currentSession?.novel])
 
 // 模拟打字机效果
+let typewriterTimer = null  // 追踪当前打字机 interval，防止竞态
 const typewriterEffect = (text) => {
+  // 取消上一次未完成的打字机效果
+  if (typewriterTimer) {
+    clearInterval(typewriterTimer)
+    typewriterTimer = null
+  }
   displayedScene.value = ''
+  if (!text) return
+
   let index = 0
-  const interval = setInterval(() => {
+  typewriterTimer = setInterval(() => {
     if (index < text.length) {
       displayedScene.value += text[index]
       index++
     } else {
-      clearInterval(interval)
+      clearInterval(typewriterTimer)
+      typewriterTimer = null
     }
   }, 20)
 }
@@ -333,6 +342,31 @@ const newGame = () => {
 
 .main-content {
   min-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.scene-description {
+  max-height: 490px;
+  overflow-y: auto;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  line-height: 1.8;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.scene-description h3 {
+  position: sticky;
+  top: 0;
+  background: inherit;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  z-index: 1;
 }
 
 .custom-action {
