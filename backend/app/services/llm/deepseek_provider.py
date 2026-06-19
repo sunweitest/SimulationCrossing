@@ -1,11 +1,12 @@
+import asyncio
 import re
 import ast
 import time
 import json
 import logging
 import uuid
-from typing import Optional, Dict, List, Callable, Awaitable
-from openai import OpenAI
+from typing import Optional, Dict, List, Callable, Awaitable, AsyncIterator
+from openai import AsyncOpenAI, OpenAI
 from app.core.config import settings
 from app.services.llm.base import LLMProvider
 
@@ -102,6 +103,37 @@ SYSTEM_PROMPT = """# 角色
 - scene_description 内的双引号必须转义为 \\\"，换行必须转义为 \\n。
 - 选项数1-5个"""
 
+STORY_STREAM_SYSTEM_PROMPT = """# 角色
+你是一位富有想象力且精通中国历史的互动小说故事大师。
+
+# 任务
+根据玩家角色、时代背景、历史上下文和玩家最新行动，直接续写下一段沉浸式剧情。
+
+# 输出要求
+- 只输出剧情正文，不要 JSON，不要 markdown，不要列出行动选项。
+- 不要输出积分、成就、系统说明或任何字段名。
+- 剧情要连贯，承接之前发生的事，展示玩家行动造成的直接后果。
+- 控制在 300-700 字，节奏紧凑，有画面感、人物反应和新的局势。
+- 严格符合所处时代，不要出现现代科技或不合时代的表达。"""
+
+METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
+请根据已经生成的剧情，为玩家生成后续行动选项、积分和成就。
+选项可以是正确的抉择、中立的抉择。也可以是错误的抉择
+只输出一个 JSON 对象，不要 markdown，不要解释：
+{
+  "choices": ["选项A", "选项B", "选项C", "选项D", "选项E"],
+  "game_update": {
+    "points_awarded": 5,
+    "new_achievement": ""
+  }
+}
+
+规则：
+- choices 必须有 5 个，每个 10-26 字，导向不同策略分支。
+- points_awarded 为 0-15 的整数，普通有效行动 1-5，聪明谋略 3-8，重大突破 8-15。
+- 没有明确里程碑时 new_achievement 返回空字符串。
+- 不要重复剧情正文。"""
+
 
 class DeepSeekProvider(LLMProvider):
     """DeepSeek LLM 提供者 (OpenAI 兼容接口)
@@ -115,6 +147,16 @@ class DeepSeekProvider(LLMProvider):
             api_key=settings.DEEPSEEK_API_KEY,
             base_url="https://api.deepseek.com",
             timeout=90.0,  # 单次请求超时 90s
+        )
+        self._async_client = AsyncOpenAI(
+            api_key=settings.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com",
+            timeout=90.0,
+        )
+        self._qwen_client = AsyncOpenAI(
+            api_key=settings.DASHSCOPE_API_KEY,
+            base_url=settings.QWEN_BASE_URL,
+            timeout=90.0,
         )
         self._temperature = settings.DEEPSEEK_TEMPERATURE
         self._max_tokens = settings.DEEPSEEK_MAX_TOKENS
@@ -192,7 +234,7 @@ class DeepSeekProvider(LLMProvider):
         try:
             for round_idx in range(max_tool_rounds + 1):
                 response = self._client.chat.completions.create(
-                    model="deepseek-v4-pro",
+                    model="deepseek-v4-flash",
                     messages=messages,
                     stream=False,
                     temperature=self._temperature,
@@ -298,16 +340,111 @@ class DeepSeekProvider(LLMProvider):
             )
             return None, session_id
 
+    async def stream_story(
+        self,
+        character_info: Dict,
+        user_input: str,
+        session_id: Optional[str] = None,
+        history: Optional[List[Dict]] = None,
+    ) -> tuple[AsyncIterator[str], str]:
+        """流式生成纯剧情文本，不要求模型输出 JSON。"""
+        effective_background = (
+            character_info.get("dynamic_background") or
+            character_info.get("background", "无")
+        )
+        user_message = self._build_user_message(character_info, effective_background, user_input)
+        messages = self._assemble_messages(user_message, history, system_prompt=STORY_STREAM_SYSTEM_PROMPT)
+        new_session_id = session_id or str(uuid.uuid4())
+
+        async def iterator() -> AsyncIterator[str]:
+            t_start = time.time()
+            full_text = []
+            try:
+                stream = await self._qwen_client.chat.completions.create(
+                    model=settings.QWEN_MODEL,
+                    messages=messages,
+                    stream=True,
+                    temperature=self._temperature,
+                    max_tokens=self._max_tokens,
+                )
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        full_text.append(delta)
+                        yield delta
+
+                text = "".join(full_text)
+                self._save_raw_log(text, new_session_id)
+                logger.info(
+                    "STORY_STREAM_OK: chars=%d time=%.1fs model=%s",
+                    len(text),
+                    time.time() - t_start,
+                    settings.QWEN_MODEL,
+                )
+            except Exception as e:
+                logger.exception("STORY_STREAM_ERR: time=%.1fs error=%s", time.time() - t_start, e)
+                raise
+
+        return iterator(), new_session_id
+
+    async def generate_scene_metadata(
+        self,
+        scene_description: str,
+        character_info: Dict,
+        user_input: str,
+    ) -> Dict:
+        """根据已生成剧情补充选项、积分和成就。"""
+        prompt = f"""角色：{character_info['name']}（{character_info['rank']}）
+世界：{character_info['novel']}
+时间节点：{character_info['timeline']}
+玩家行动：{user_input}
+
+已生成剧情：
+{scene_description[:4000]}
+
+请生成行动选项、积分和成就。"""
+
+        try:
+            response = await self._qwen_client.chat.completions.create(
+                model=settings.QWEN_METADATA_MODEL,
+                messages=[
+                    {"role": "system", "content": METADATA_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                stream=False,
+                temperature=0.5,
+                max_tokens=512,
+            )
+            text = (response.choices[0].message.content or "").strip()
+            text = self._clean_response(text)
+            result = self._parse_metadata(text)
+            if result:
+                logger.info(
+                    "METADATA_GEN_OK: choices=%d points=%s achievement=%s",
+                    len(result["choices"]),
+                    result["game_update"].get("points_awarded"),
+                    result["game_update"].get("new_achievement"),
+                )
+                return result
+            raise ValueError("metadata response is not valid JSON")
+        except Exception as e:
+            logger.warning("METADATA_GEN_FAIL: %s", e)
+            return {
+                "choices": ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"],
+                "game_update": {"points_awarded": 5, "new_achievement": ""},
+            }
+
     def _assemble_messages(
         self,
         user_message: str,
         history: Optional[List[Dict]],
+        system_prompt: str = SYSTEM_PROMPT,
     ) -> List[Dict]:
         """组装发送给 LLM 的完整消息列表
 
         提取自 generate() 的消息构建逻辑，方便复用。
         """
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": system_prompt}]
 
         if history:
             has_summary = (
@@ -426,6 +563,51 @@ class DeepSeekProvider(LLMProvider):
             pass
 
         return None
+
+    @staticmethod
+    def _parse_metadata(text: str) -> Optional[Dict]:
+        text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+        text = re.sub(r"\s*```$", "", text)
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        candidate = match.group(0) if match else text
+
+        try:
+            result = json.loads(candidate)
+        except json.JSONDecodeError:
+            try:
+                result = ast.literal_eval(candidate)
+            except (ValueError, SyntaxError):
+                return None
+
+        if not isinstance(result, dict):
+            return None
+
+        choices = result.get("choices")
+        game_update = result.get("game_update") or {}
+        if not isinstance(choices, list):
+            return None
+
+        choices = [str(choice).strip() for choice in choices if str(choice).strip()]
+        defaults = ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"]
+        for default in defaults:
+            if len(choices) >= 5:
+                break
+            if default not in choices:
+                choices.append(default)
+
+        try:
+            points = int(game_update.get("points_awarded", 5))
+        except (TypeError, ValueError):
+            points = 5
+        points = max(0, min(points, 15))
+
+        return {
+            "choices": choices[:5],
+            "game_update": {
+                "points_awarded": points,
+                "new_achievement": str(game_update.get("new_achievement") or "").strip(),
+            },
+        }
 
     async def generate_choices(
             self,

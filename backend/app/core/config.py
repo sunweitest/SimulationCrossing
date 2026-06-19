@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     CHARACTER_EXTRACTION_MODEL: str = "deepseek-v4-flash"  # 角色提取使用的模型
     CHARACTER_EXTRACTION_TEMPERATURE: float = 0.2          # 低温度确保结构化输出
 
+    # Qwen OpenAI兼容接口，用于流式剧情和结构化游戏元素生成
+    QWEN_BASE_URL: str = "https://llm-t2prhzae03osgg8c.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    QWEN_MODEL: str = "qwen-plus"
+    QWEN_METADATA_MODEL: str = "qwen-plus"
+
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
 

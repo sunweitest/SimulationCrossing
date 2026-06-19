@@ -1,6 +1,8 @@
 import time
 import logging
+import json
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
@@ -17,6 +19,10 @@ from typing import Optional
 logger = logging.getLogger("game_api")
 
 router = APIRouter(prefix="/api/game", tags=["游戏"])
+
+
+def _sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.get("/characters")
@@ -287,6 +293,166 @@ async def perform_action(
     )
 
     return Scene(**new_scene)
+
+
+@router.post("/action/stream")
+async def perform_action_stream(
+    action_data: UserAction,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """流式执行游戏行动：先推送纯剧情，再推送选项/积分/成就。"""
+    t_total_start = time.time()
+    logger.info(
+        "ACTION_STREAM_START: session_id=%d action=%.40s user=%s",
+        action_data.game_session_id,
+        action_data.action,
+        current_user.id if current_user else "guest",
+    )
+
+    result = await db.execute(
+        select(GameSession).where(GameSession.id == action_data.game_session_id)
+    )
+    game_session = result.scalar_one_or_none()
+
+    if not game_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="游戏会话不存在",
+        )
+
+    if current_user and game_session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无权访问此游戏会话",
+        )
+
+    character_info = {
+        "name": game_session.character_name,
+        "rank": game_session.character_rank,
+        "background": game_session.character_background,
+        "novel": game_session.novel,
+        "timeline": game_session.timeline,
+    }
+
+    if game_session.character_type == "preset":
+        preset_info = await GameService.get_preset_character(
+            db,
+            game_session.novel,
+            game_session.character_name,
+            game_session.timeline,
+        )
+        if preset_info:
+            character_info["dynamic_background"] = preset_info.get("dynamic_background")
+
+    context = await GameService.build_conversation_history(
+        db,
+        action_data.game_session_id,
+    )
+
+    if context.needs_compression and context.turns_for_compression:
+        background_tasks.add_task(
+            GameService.compress_and_store_context,
+            action_data.game_session_id,
+            context.turns_for_compression,
+            context.total_turns,
+        )
+
+    async def event_stream():
+        story_parts = []
+        new_session_id = game_session.session_id
+
+        yield _sse("status", {"phase": "story", "message": "剧情生成中"})
+
+        try:
+            story_iter, generated_session_id = await GameService.stream_story_text(
+                action_data.action,
+                character_info,
+                game_session.session_id,
+                history=context.messages,
+            )
+            new_session_id = generated_session_id or new_session_id
+
+            async for chunk in story_iter:
+                story_parts.append(chunk)
+                yield _sse("story_chunk", {"delta": chunk})
+        except Exception as exc:
+            logger.exception("ACTION_STREAM_STORY_FAIL: %s", exc)
+            fallback = GameService.get_fallback_scene(action_data.action)
+            story_parts = [fallback["scene_description"]]
+            yield _sse("story_chunk", {"delta": fallback["scene_description"]})
+
+        scene_description = "".join(story_parts).strip()
+        if not scene_description:
+            fallback = GameService.get_fallback_scene(action_data.action)
+            scene_description = fallback["scene_description"]
+            yield _sse("story_chunk", {"delta": scene_description})
+
+        yield _sse("status", {"phase": "metadata", "message": "行动选项生成中"})
+
+        metadata = await GameService.generate_scene_metadata(
+            scene_description,
+            character_info,
+            action_data.action,
+        )
+        new_scene = {
+            "scene_description": scene_description,
+            "choices": metadata["choices"],
+            "game_update": metadata["game_update"],
+        }
+
+        if new_session_id:
+            game_session.session_id = new_session_id
+
+        game_session.points += new_scene["game_update"]["points_awarded"]
+        new_achievement = new_scene["game_update"]["new_achievement"]
+        if new_achievement and new_achievement not in game_session.achievements:
+            achievements_list = list(game_session.achievements) if game_session.achievements else []
+            achievements_list.append(new_achievement)
+            game_session.achievements = achievements_list
+
+        game_session.current_scene = new_scene
+
+        scene_history = SceneHistory(
+            game_session_id=game_session.id,
+            scene_description=new_scene["scene_description"],
+            choices=new_scene["choices"],
+            points_awarded=new_scene["game_update"]["points_awarded"],
+            achievement=new_achievement,
+        )
+        db.add(scene_history)
+
+        choice_history = ChoiceHistory(
+            game_session_id=game_session.id,
+            choice=action_data.action,
+            points=new_scene["game_update"]["points_awarded"],
+        )
+        db.add(choice_history)
+
+        await db.commit()
+        await db.refresh(game_session)
+
+        logger.info(
+            "ACTION_STREAM_DONE: session_id=%d action=%.30s time=%.1fs points=%d achievements=%d",
+            action_data.game_session_id,
+            action_data.action,
+            time.time() - t_total_start,
+            game_session.points,
+            len(game_session.achievements) if game_session.achievements else 0,
+        )
+
+        yield _sse("scene", new_scene)
+        yield _sse("done", {"ok": True})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/character/{novel}/{name}")

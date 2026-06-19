@@ -81,13 +81,13 @@
           <h2>🎭 游戏进行中</h2>
 
           <!-- 加载中 -->
-          <div v-if="gameStore.isGenerating" class="loading">
+          <div v-if="gameStore.isGenerating" class="loading compact-loading">
             <div class="spinner"></div>
-            <p class="mt-2">⏳ AI正在生成剧情...</p>
+            <p class="mt-2">⏳ {{ streamStatus }}</p>
           </div>
 
           <!-- 剧情显示 -->
-          <div v-else-if="currentScene">
+          <div v-if="currentScene">
             <div class="scene-description">
               <h3>📖 剧情发展</h3>
               <p>{{ displayedScene }}</p>
@@ -100,10 +100,17 @@
                   v-for="(choice, index) in currentScene.choices"
                   :key="index"
                   @click="performAction(choice)"
-                  :disabled="gameStore.isGenerating"
+                  :disabled="gameStore.isGenerating || isAwaitingOptions"
                   class="btn choice-btn"
                 >
                   {{ choice }}
+                </button>
+                <button
+                  v-if="isAwaitingOptions || !currentScene.choices?.length"
+                  class="btn choice-btn"
+                  disabled
+                >
+                  正在生成行动选项...
                 </button>
               </div>
             </div>
@@ -121,7 +128,7 @@
                 <button
                   @click="performCustomAction"
                   class="btn btn-primary mt-2"
-                  :disabled="gameStore.isGenerating || !customAction.trim()"
+                  :disabled="gameStore.isGenerating || isAwaitingOptions || !customAction.trim()"
                 >
                   执行行动
                 </button>
@@ -130,7 +137,7 @@
           </div>
 
           <!-- 无场景 -->
-          <div v-else class="text-center text-muted">
+          <div v-if="!currentScene" class="text-center text-muted">
             <p>加载游戏中...</p>
           </div>
 
@@ -176,6 +183,8 @@ const error = ref('')
 const needsLogin = ref(false)
 const displayedScene = ref('')
 const achievementToast = ref(null)  // { name, visible }
+const isAwaitingOptions = ref(false)
+const streamStatus = ref('AI正在生成剧情...')
 
 const currentScene = computed(() => gameStore.currentSession?.current_scene)
 const worldImageMap = {
@@ -238,13 +247,36 @@ const performAction = async (action) => {
 
   error.value = ''
   needsLogin.value = false
+  isAwaitingOptions.value = true
+  streamStatus.value = 'AI正在生成剧情...'
 
   try {
-    const scene = await gameStore.performAction(action)
+    displayedScene.value = ''
+    gameStore.currentSession.current_scene = {
+      scene_description: '',
+      choices: [],
+      game_update: { points_awarded: 0, new_achievement: '' }
+    }
 
-    // 更新会话以包含新场景
-    gameStore.currentSession.current_scene = scene
-    gameStore.currentSession.points += scene.game_update.points_awarded
+    const scene = await gameStore.performActionStream(action, {
+      onStatus: (status) => {
+        streamStatus.value = status.message || streamStatus.value
+        if (status.phase === 'metadata') {
+          isAwaitingOptions.value = true
+        }
+      },
+      onStoryChunk: (delta) => {
+        displayedScene.value += delta
+      },
+      onScene: (scenePayload) => {
+        displayedScene.value = scenePayload.scene_description
+        isAwaitingOptions.value = false
+      }
+    })
+
+    if (!scene) {
+      throw new Error('执行行动失败')
+    }
 
     if (scene.game_update.new_achievement) {
       const achievements = gameStore.currentSession.achievements || []
@@ -260,16 +292,16 @@ const performAction = async (action) => {
         }, 3000)
       }
     }
-
-    typewriterEffect(scene.scene_description)
   } catch (err) {
     if (err.response?.status === 429) {
       error.value = err.response.data.detail.message || '今日次数已用完'
       needsLogin.value = err.response.data.detail.needs_login
     } else {
       const detail = err.response?.data?.detail
-      error.value = typeof detail === 'string' ? detail : detail?.message || '执行行动失败'
+      error.value = typeof detail === 'string' ? detail : detail?.message || err.message || '执行行动失败'
     }
+  } finally {
+    isAwaitingOptions.value = false
   }
 }
 
@@ -367,6 +399,15 @@ const newGame = () => {
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color);
   z-index: 1;
+}
+
+.compact-loading {
+  padding: 1rem;
+}
+
+.compact-loading .spinner {
+  width: 28px;
+  height: 28px;
 }
 
 .custom-action {

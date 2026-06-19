@@ -496,6 +496,57 @@ class GameService:
         return result
 
     @staticmethod
+    async def stream_story_text(
+        user_input: str,
+        character_info: Dict,
+        session_id: Optional[str] = None,
+        history: Optional[List[Dict]] = None,
+    ):
+        """流式生成纯剧情文本。"""
+        provider = get_provider()
+        if hasattr(provider, "stream_story"):
+            return await provider.stream_story(
+                character_info,
+                user_input,
+                session_id,
+                history=history,
+            )
+
+        raw_text, new_session_id = await provider.generate(
+            character_info,
+            user_input,
+            session_id,
+            history=history,
+        )
+
+        async def iterator():
+            if raw_text:
+                yield raw_text
+
+        return iterator(), new_session_id
+
+    @staticmethod
+    async def generate_scene_metadata(
+        scene_description: str,
+        character_info: Dict,
+        user_input: str,
+    ) -> Dict:
+        """根据剧情生成选项、积分和成就。"""
+        provider = get_provider()
+        if hasattr(provider, "generate_scene_metadata"):
+            return await provider.generate_scene_metadata(
+                scene_description,
+                character_info,
+                user_input,
+            )
+
+        choices = await provider.generate_choices(scene_description, character_info)
+        return {
+            "choices": choices,
+            "game_update": {"points_awarded": 5, "new_achievement": ""},
+        }
+
+    @staticmethod
     def parse_llm_response(raw_text: str, game_session_id: int = 0) -> Optional[Dict]:
         """解析 LLM 返回的 JSON"""
         t_start = time.time()
