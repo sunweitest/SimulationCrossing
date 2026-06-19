@@ -66,6 +66,10 @@
           </div>
         </div>
 
+        <router-link to="/character-relations" class="btn btn-block mt-2" style="text-align:center;text-decoration:none;">
+          👥 人物关系
+        </router-link>
+
         <router-link v-if="authStore.isAuthenticated" to="/my-games" class="btn btn-block mt-2" style="text-align:center;text-decoration:none;">
           📋 我的游戏
         </router-link>
@@ -118,13 +122,15 @@
             <div class="mt-3">
               <h3>💬 自由行动</h3>
               <div class="custom-action">
-                <input
+                <textarea
+                  ref="actionTextarea"
                   v-model="customAction"
-                  type="text"
-                  class="input"
+                  class="input action-textarea"
                   placeholder="或者输入自定义行动..."
-                  @keyup.enter="performCustomAction"
-                />
+                  rows="1"
+                  @input="autoResize"
+                  @keyup.enter.exact="performCustomAction"
+                ></textarea>
                 <button
                   @click="performCustomAction"
                   class="btn btn-primary mt-2"
@@ -179,12 +185,20 @@ const gameStore = useGameStore()
 const authStore = useAuthStore()
 
 const customAction = ref('')
+const actionTextarea = ref(null)
 const error = ref('')
 const needsLogin = ref(false)
 const displayedScene = ref('')
 const achievementToast = ref(null)  // { name, visible }
 const isAwaitingOptions = ref(false)
 const streamStatus = ref('AI正在生成剧情...')
+
+const autoResize = () => {
+  const el = actionTextarea.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
 
 const currentScene = computed(() => gameStore.currentSession?.current_scene)
 const worldImageMap = {
@@ -309,6 +323,10 @@ const performCustomAction = () => {
   if (customAction.value.trim()) {
     performAction(customAction.value)
     customAction.value = ''
+    // 重置 textarea 高度
+    if (actionTextarea.value) {
+      actionTextarea.value.style.height = 'auto'
+    }
   }
 }
 
@@ -413,6 +431,19 @@ const newGame = () => {
 .custom-action {
   display: flex;
   flex-direction: column;
+}
+
+.action-textarea {
+  resize: none;
+  overflow: hidden;
+  min-height: 42px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
+.achievement-list {
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .btn:disabled {

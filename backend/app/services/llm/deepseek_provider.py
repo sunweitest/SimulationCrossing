@@ -48,11 +48,11 @@ SYSTEM_PROMPT = """# 角色
 根据玩家所扮演角色的行动，动态生成引人入胜的故事情节，让玩家在历史洪流中体验抉择的分量与命运的无常。
 
 ## 角色关系意识
-- 当对话历史中出现【当前人物关系】块时，你必须严格依据其中记录的好感度和关系来塑造人物行为。
-- 好感度影响人物对玩家的态度：高好感度（≥50）意味着友善、信任、愿意帮助；低好感度（≤-50）意味着冷漠、猜疑甚至敌对。
-- 人物的对话语气、行为选择、是否背叛或帮助玩家，都应与好感度数值一致。
-- 随着剧情发展，人物关系会自然变化——如果玩家的行为明确改善了或损害了与某个人物的关系，请根据变化幅度适当调整（后续系统会做结构化更新）。
-- 即使对话历史中没有【当前人物关系】块，你也应保持之前出现过的人物行为的一致性——不要遗忘或OOC（角色崩坏）。
+- 故事中已出现过的人物及其好感度、关系、状态等信息，可通过 query_character 工具按姓名查询。
+- 当剧情中需要召回、引用或描写某个已知人物时，务必先调用 query_character 工具查询其最新状态。
+- 严格依据查询到的好感度值和关系来塑造该人物的言行：好感度 ≥50 友善信任、≤-50 冷漠敌视。
+- 查询不到的人物视为新角色，可自由塑造其初始形象和态度。
+- 如果玩家的行为明确改善了或损害了与某个人物的关系，请根据变化幅度在剧情中体现（后续系统会做结构化更新）。
 
 ## 技能
 
@@ -85,23 +85,9 @@ SYSTEM_PROMPT = """# 角色
 - 人物对话要符合其身份、性格和时代背景，让配角也鲜活有个性。
 - 可适当融入该时代的真实历史事件、人物或典故，增强沉浸感。
 
-## 输出格式（严格遵守）
-你必须**只输出**一个 JSON 对象，不能有任何前缀文字、后缀文字或 markdown 包裹。直接输出：
-
-{
-  "scene_description": "剧情描述（500字以内）",
-  "choices": ["选项A（20字以内）", "选项B", "选项C", "选项D", "选项E"],
-  "game_update": {
-    "points_awarded": 5,
-    "new_achievement": "成就名称（没有则留空字符串）"
-  }
-}
-
-## 重要提醒
-- 你的回复必须以 `{` 开头，以 `}` 结尾，中间不能有任何非 JSON 内容。
-- scene_description 中不要包含选项列表，选项只出现在 choices 数组中。
-- scene_description 内的双引号必须转义为 \\\"，换行必须转义为 \\n。
-- 选项数1-5个"""
+## 输出格式
+剧情文字描述
+  """
 
 STORY_STREAM_SYSTEM_PROMPT = """# 角色
 你是一位富有想象力且精通中国历史的互动小说故事大师。
@@ -109,16 +95,21 @@ STORY_STREAM_SYSTEM_PROMPT = """# 角色
 # 任务
 根据玩家角色、时代背景、历史上下文和玩家最新行动，直接续写下一段沉浸式剧情。
 
+# 角色关系意识
+- 故事中已出现过的人物及其好感度、关系、状态等信息可通过工具查询。
+- 当剧情需要召回、引用或描写某个已知人物时，务必先调用 query_character 工具查询其最新状态。
+- 严格依据查询到的好感度值和关系来塑造该人物的言行——好感度 ≥50 友善信任，≤-50 冷漠敌视。
+- 查询不到的人物视为新角色，可自由塑造。
+
 # 输出要求
 - 只输出剧情正文，不要 JSON，不要 markdown，不要列出行动选项。
 - 不要输出积分、成就、系统说明或任何字段名。
 - 剧情要连贯，承接之前发生的事，展示玩家行动造成的直接后果。
-- 控制在 300-700 字，节奏紧凑，有画面感、人物反应和新的局势。
+- 控制在 200-600 字，节奏紧凑，有画面感、人物反应和新的局势。
 - 严格符合所处时代，不要出现现代科技或不合时代的表达。"""
 
 METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
 请根据已经生成的剧情，为玩家生成后续行动选项、积分和成就。
-选项可以是正确的抉择、中立的抉择。也可以是错误的抉择
 只输出一个 JSON 对象，不要 markdown，不要解释：
 {
   "choices": ["选项A", "选项B", "选项C", "选项D", "选项E"],
@@ -130,7 +121,7 @@ METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
 
 规则：
 - choices 必须有 5 个，每个 10-26 字，导向不同策略分支。
-- points_awarded 为 0-15 的整数，普通有效行动 1-5，聪明谋略 3-8，重大突破 8-15。
+- points_awarded 为 0-15 的整数，有利于玩家利益最大化的行为（1-5分），展现智慧与谋略的行为（3-8分），推动人类文明向前、向善发展的重大举措（8-15分）.
 - 没有明确里程碑时 new_achievement 返回空字符串。
 - 不要重复剧情正文。"""
 
@@ -346,8 +337,14 @@ class DeepSeekProvider(LLMProvider):
         user_input: str,
         session_id: Optional[str] = None,
         history: Optional[List[Dict]] = None,
+        tools: Optional[List[Dict]] = None,
+        tool_handler: Optional[Callable[[str, str], Awaitable[str]]] = None,
     ) -> tuple[AsyncIterator[str], str]:
-        """流式生成纯剧情文本，不要求模型输出 JSON。"""
+        """流式生成纯剧情文本，不要求模型输出 JSON。
+
+        如果提供了 tools + tool_handler，先通过非流式 tool call loop
+        让 LLM 按需查询角色信息，再将最终文本以流式输出。
+        """
         effective_background = (
             character_info.get("dynamic_background") or
             character_info.get("background", "无")
@@ -356,12 +353,99 @@ class DeepSeekProvider(LLMProvider):
         messages = self._assemble_messages(user_message, history, system_prompt=STORY_STREAM_SYSTEM_PROMPT)
         new_session_id = session_id or str(uuid.uuid4())
 
+        # 如果有 tool calling 需求，先非流式处理 tool loop，再模拟流式输出
+        use_tools = bool(tools and tool_handler)
+
         async def iterator() -> AsyncIterator[str]:
             t_start = time.time()
             full_text = []
+
             try:
-                stream = await self._qwen_client.chat.completions.create(
-                    model=settings.QWEN_MODEL,
+                if use_tools:
+                    # ── 非流式 tool call loop ──
+                    max_tool_rounds = 3
+                    tool_messages = list(messages)  # 拷贝，避免污染外层
+                    for _round_idx in range(max_tool_rounds + 1):
+                        response = self._client.chat.completions.create(
+                            model="deepseek-v4-flash",
+                            messages=tool_messages,
+                            stream=False,
+                            temperature=self._temperature,
+                            max_tokens=self._max_tokens,
+                            tools=tools,
+                        )
+                        msg = response.choices[0].message
+
+                        if not msg.tool_calls:
+                            text = msg.content or ""
+                            full_text.append(text)
+                            self._save_raw_log("".join(full_text), new_session_id)
+                            logger.info(
+                                "STREAM_TOOL_OK: chars=%d rounds=%d time=%.1fs",
+                                len(text), _round_idx + 1, time.time() - t_start,
+                            )
+                            # 逐字符模拟流式输出
+                            for ch in text:
+                                yield ch
+                            return
+
+                        logger.info(
+                            "STREAM_TOOL_CALLS: round=%d calls=%d",
+                            _round_idx, len(msg.tool_calls),
+                        )
+                        tool_messages.append({
+                            "role": "assistant",
+                            "content": msg.content or "",
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.function.name,
+                                        "arguments": tc.function.arguments,
+                                    },
+                                }
+                                for tc in msg.tool_calls
+                            ],
+                        })
+                        for tc in msg.tool_calls:
+                            try:
+                                result = await tool_handler(tc.function.name, tc.function.arguments)
+                            except Exception as e:
+                                logger.exception(
+                                    "STREAM_TOOL_HANDLER_ERROR: tool=%s args=%s err=%s",
+                                    tc.function.name, tc.function.arguments, e,
+                                )
+                                result = json.dumps({"error": str(e)})
+                            tool_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": result,
+                            })
+                            logger.info(
+                                "STREAM_TOOL_RESULT: tool=%s args=%s result_len=%d",
+                                tc.function.name, tc.function.arguments, len(result),
+                            )
+
+                    logger.warning("STREAM_TOOL_LOOP_EXHAUSTED: max_rounds=%d", max_tool_rounds)
+                    # 兜底：超限后用没有 tools 的参数再请求一次
+                    fallback_resp = self._client.chat.completions.create(
+                        model="deepseek-v4-flash",
+                        messages=tool_messages,
+                        stream=False,
+                        temperature=self._temperature,
+                        max_tokens=self._max_tokens,
+                    )
+                    text = fallback_resp.choices[0].message.content or ""
+                    full_text.append(text)
+                    self._save_raw_log("".join(full_text), new_session_id)
+                    for ch in text:
+                        yield ch
+                    return
+
+                # ── 无 tools：直接流式调用 ──
+                stream = await self._async_client.chat.completions.create(
+                    model="deepseek-v4-flash",
                     messages=messages,
                     stream=True,
                     temperature=self._temperature,
@@ -376,10 +460,9 @@ class DeepSeekProvider(LLMProvider):
                 text = "".join(full_text)
                 self._save_raw_log(text, new_session_id)
                 logger.info(
-                    "STORY_STREAM_OK: chars=%d time=%.1fs model=%s",
+                    "STORY_STREAM_OK: chars=%d time=%.1fs model=deepseek-v4-flash",
                     len(text),
                     time.time() - t_start,
-                    settings.QWEN_MODEL,
                 )
             except Exception as e:
                 logger.exception("STORY_STREAM_ERR: time=%.1fs error=%s", time.time() - t_start, e)

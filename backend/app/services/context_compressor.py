@@ -192,11 +192,22 @@ async def extract_characters(
                 {"role": "user", "content": prompt},
             ],
             temperature=settings.CHARACTER_EXTRACTION_TEMPERATURE,
-            max_tokens=1024,
+            max_tokens=4096,
             stream=False,
         )
 
+        finish_reason = response.choices[0].finish_reason
         raw = (response.choices[0].message.content or "").strip()
+        _save_character_raw_log(raw, last_turn)
+
+        if finish_reason == "length":
+            logger.warning(
+                "CHARACTER_EXTRACT_TRUNCATED: max_tokens 不足，输出被截断 chars=%d",
+                len(raw),
+            )
+            # 尝试修复截断的 JSON：补上缺失的引号和括号
+            raw = _repair_truncated_json(raw)
+
         result = _parse_character_json(raw)
 
         if result and isinstance(result, list):
@@ -216,11 +227,27 @@ async def extract_characters(
         return None
 
 
+def _save_character_raw_log(raw_text: str, last_turn: int) -> None:
+    """将角色提取的原始 LLM 响应写入日志文件，方便排查解析失败"""
+    try:
+        from pathlib import Path
+        from datetime import datetime
+        log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        fname = log_dir / f"character_raw_{ts}_turn{last_turn}.txt"
+        fname.write_text(raw_text, encoding="utf-8")
+        logger.info("CHARACTER_RAW_LOG: %s", fname.name)
+    except Exception as e:
+        logger.warning("CHARACTER_RAW_LOG_ERR: %s", e)
+
+
 def _parse_character_json(raw_text: str) -> Optional[List]:
     """多级 fallback 解析 LLM 输出的角色 JSON 数组
 
-    策略与 DeepSeekProvider._parse_choices 一致：
-    去围栏 → 正则提取 → json.loads → ast.literal_eval
+    策略：
+    1. 去围栏 → 控制字符清理 → 正则提取 → json.loads → ast.literal_eval
+    2. 兜底：尝试从 {"characters": [...]} 对象中提取
     """
     import ast
 
@@ -229,24 +256,163 @@ def _parse_character_json(raw_text: str) -> Optional[List]:
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
 
-    # 正则提取最外层 [...]
-    m = re.search(r"\[.*\]", text, re.DOTALL)
-    bracketed = m.group(0) if m else text
+    # ── 尝试作为对象提取 {"characters": [...]} ──
+    for candidate in _extract_candidates(text):
+        # json.loads
+        try:
+            result = json.loads(candidate)
+            if isinstance(result, list):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
 
-    # json.loads
+        # 控制字符清理后重试
+        sanitized = _sanitize_json_string(candidate)
+        try:
+            result = json.loads(sanitized)
+            if isinstance(result, list):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # ast.literal_eval 兜底
+        try:
+            result = ast.literal_eval(candidate)
+            if isinstance(result, list):
+                return result
+        except (ValueError, SyntaxError):
+            pass
+
+        try:
+            result = ast.literal_eval(sanitized)
+            if isinstance(result, list):
+                return result
+        except (ValueError, SyntaxError):
+            pass
+
+    # ── 兜底：尝试解析 {"characters": [...]} 对象 ──
     try:
-        result = json.loads(bracketed)
-        if isinstance(result, list):
-            return result
+        result = json.loads(text)
+        if isinstance(result, dict) and "characters" in result:
+            return result["characters"]
     except (json.JSONDecodeError, ValueError):
         pass
 
-    # ast.literal_eval 兜底
     try:
-        result = ast.literal_eval(bracketed)
-        if isinstance(result, list):
-            return result
-    except (ValueError, SyntaxError):
+        result = json.loads(_sanitize_json_string(text))
+        if isinstance(result, dict) and "characters" in result:
+            return result["characters"]
+    except (json.JSONDecodeError, ValueError):
         pass
 
     return None
+
+
+def _extract_candidates(text: str) -> List[str]:
+    """从文本中提取可能的 JSON 数组候选"""
+    candidates = []
+
+    # 正则提取最外层 [...]
+    m = re.search(r"\[.*\]", text, re.DOTALL)
+    if m:
+        candidates.append(m.group(0))
+
+    # 如果文本本身就是候选且未被正则覆盖
+    if text not in candidates:
+        candidates.append(text)
+
+    return candidates
+
+
+def _sanitize_json_string(text: str) -> str:
+    """清理 JSON 字符串中的非法控制字符和常见问题
+
+    - 替换未转义的换行符（在字符串值内部）
+    - 移除 ASCII 控制字符（保留 \t \n \r）
+    - 修复末尾多余逗号（JSON 非法但 Python 合法）
+    """
+    # 移除除了 \t \n \r 之外的 ASCII 控制字符 (0x00-0x1f)
+    sanitized = []
+    for ch in text:
+        cp = ord(ch)
+        if cp < 0x20 and cp not in (0x09, 0x0a, 0x0d):
+            # 替换为空格，避免破坏 JSON 结构
+            sanitized.append(" ")
+        else:
+            sanitized.append(ch)
+
+    result = "".join(sanitized)
+
+    # 修复末尾多余逗号：在 ] 或 } 前的逗号
+    result = re.sub(r",\s*([}\]])", r"\1", result)
+
+    return result
+
+
+def _repair_truncated_json(raw_text: str) -> str:
+    """尝试修复因 max_tokens 不足而被截断的 JSON 数组
+
+    策略：找到最后一个完整的对象（闭合的 }），截断其后内容，补上 ]
+    如果无法找到完整对象，返回原文让后续 fallback 处理。
+    """
+    # 找到所有 } 的位置（作为对象结束的候选）
+    # 从后往前找到最后一个看起来是完整对象结束的 }
+    text = raw_text.strip()
+
+    # 去掉末尾明显不完整的片段（如最后一行是半个字符串值）
+    # 尝试从最后一个 " 后跟 , 再跟换行和 { 的模式来定位
+    # 简单策略：找到最后一个 " 后跟 \n 再跟 ] 或 \n 再跟 } 的位置
+
+    # 如果文本以 ] 结尾，可能已经完整
+    if text.endswith("]"):
+        return text
+
+    # 策略1：找到最后一个完整的对象（} 后面紧跟 , 或换行）
+    # 从后往前扫描，找到最后一个 } 后跟可选空白再跟 , 或直接是数组结束位置
+    last_complete = -1
+    depth = 0
+    in_string = False
+    escape = False
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                # 这个 } 闭合了一个顶层对象
+                # 检查后面是否只有空白和 , 或直接到数组尾
+                after = text[i + 1:i + 50].lstrip()
+                if after.startswith(",") or after.startswith("]"):
+                    last_complete = i + 1  # 包含 }
+
+    if last_complete > 0:
+        repaired = text[:last_complete] + "\n]"
+        logger.info(
+            "CHARACTER_TRUNCATED_REPAIR: original=%d repaired=%d",
+            len(text), len(repaired),
+        )
+        return repaired
+
+    # 策略2：暴力 — 从最后一个 } 处截断并补 ]
+    last_brace = text.rfind("}")
+    if last_brace > 0:
+        repaired = text[:last_brace + 1] + "\n]"
+        logger.info(
+            "CHARACTER_TRUNCATED_REPAIR_FALLBACK: original=%d repaired=%d",
+            len(text), len(repaired),
+        )
+        return repaired
+
+    # 无法修复
+    return text

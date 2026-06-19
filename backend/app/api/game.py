@@ -371,6 +371,7 @@ async def perform_action_stream(
                 character_info,
                 game_session.session_id,
                 history=context.messages,
+                characters_state=game_session.characters_state,
             )
             new_session_id = generated_session_id or new_session_id
 

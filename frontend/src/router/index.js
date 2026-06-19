@@ -33,6 +33,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/character-relations',
+    name: 'CharacterRelations',
+    component: () => import('@/views/CharacterRelationsView.vue'),
+    meta: { requiresGame: true }
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: () => import('@/views/AdminView.vue')

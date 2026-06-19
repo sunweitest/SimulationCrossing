@@ -81,52 +81,6 @@ def _favorability_label(score: int) -> str:
         return "深仇大恨"
 
 
-def _prefilter_characters(
-    user_input: str,
-    characters_state: Optional[Dict],
-    scene_text: str = "",
-) -> list[Dict]:
-    """扫描用户输入（及可选场景文本），匹配 characters_state 中的角色名。
-
-    只返回用户提及的角色，避免全量注入浪费 token。
-    匹配策略：简单子串匹配（角色名出现在输入文本中即命中）。
-    """
-    if not characters_state:
-        return []
-    chars = characters_state.get("characters", [])
-    if not chars:
-        return []
-
-    combined = user_input + (" " + scene_text if scene_text else "")
-    matched = []
-    for c in chars:
-        name = c.get("name", "")
-        if name and name in combined:
-            matched.append(c)
-    return matched
-
-
-def _build_character_context(matched_characters: list[Dict]) -> str:
-    """将命中的角色列表格式化为注入到用户消息中的角色信息块"""
-    if not matched_characters:
-        return ""
-
-    lines = []
-    for c in matched_characters:
-        fav = c.get("favorability", 0)
-        label = _favorability_label(fav)
-        lines.append(
-            f"- {c['name']}（{c.get('identity', '未知')}）："
-            f"与你的关系为「{c.get('relationship_to_player', '未知')}」"
-            f"、好感度 {fav}（{label}）"
-            f"、状态 {c.get('status', '存活')}"
-        )
-
-    return (
-        "\n\n【相关人物信息】以下是你当前提及或涉及的人物详情，"
-        "请在剧情中保持其行为与关系、好感度一致：\n"
-        + "\n".join(lines)
-    )
 
 
 async def _character_tool_handler(
@@ -311,7 +265,7 @@ class GameService:
 
         if running_summary:
             # 有摘要：前缀 + 最近轮
-            # 注：人物关系不再全量注入，改为按需预过滤 + tool calling
+            # 注：人物关系通过 tool calling 按需查询
             prefix = [
                 {
                     "role": "user",
@@ -445,29 +399,17 @@ class GameService:
     ) -> tuple[Optional[str], Optional[str]]:
         """调用 LLM API 生成场景
 
-        如果提供了 characters_state：
-        - 预过滤用户输入中提及的角色，注入到消息中
-        - 启用 tool calling，LLM 可主动查询未提及但需要引用的角色
+        如果提供了 characters_state，启用 tool calling，
+        LLM 可通过 query_character() 按需查询任何角色信息。
         """
         t_start = time.time()
         provider = get_provider()
 
-        # ── 预过滤：扫描用户输入中提及的角色 ──
-        prefiltered_context = ""
         tools = None
         tool_handler = None
 
         if characters_state:
-            matched = _prefilter_characters(user_input, characters_state)
-            if matched:
-                prefiltered_context = _build_character_context(matched)
-                logger.info(
-                    "CHAR_PREFILTER: matched=%d names=%s",
-                    len(matched),
-                    [c["name"] for c in matched],
-                )
-
-            # 创建 tool handler，让 LLM 可以主动查询任何角色
+            # 创建 tool handler，让 LLM 主动查询角色信息
             cs = characters_state  # capture for closure
             tool_handler = lambda name, args: _character_tool_handler(
                 name, args, characters_state=cs,
@@ -475,12 +417,9 @@ class GameService:
             from app.services.llm.deepseek_provider import CHARACTER_TOOLS
             tools = CHARACTER_TOOLS
 
-        # 将预过滤的角色信息拼入 user_input
-        augmented_input = user_input + prefiltered_context
-
         result = await provider.generate(
             character_info,
-            augmented_input,
+            user_input,
             session_id,
             history=history,
             tools=tools,
@@ -501,15 +440,34 @@ class GameService:
         character_info: Dict,
         session_id: Optional[str] = None,
         history: Optional[List[Dict]] = None,
+        characters_state: Optional[Dict] = None,
     ):
-        """流式生成纯剧情文本。"""
+        """流式生成纯剧情文本。
+
+        如果提供了 characters_state，启用 tool calling，
+        LLM 可在生成剧情前通过 query_character() 按需查询角色信息。
+        """
         provider = get_provider()
+
+        tools = None
+        tool_handler = None
+
+        if characters_state and hasattr(provider, "stream_story"):
+            cs = characters_state  # capture for closure
+            tool_handler = lambda name, args: _character_tool_handler(
+                name, args, characters_state=cs,
+            )
+            from app.services.llm.deepseek_provider import CHARACTER_TOOLS
+            tools = CHARACTER_TOOLS
+
         if hasattr(provider, "stream_story"):
             return await provider.stream_story(
                 character_info,
                 user_input,
                 session_id,
                 history=history,
+                tools=tools,
+                tool_handler=tool_handler,
             )
 
         raw_text, new_session_id = await provider.generate(
