@@ -27,11 +27,7 @@
           <div class="input-group">
             <label>选择小说/历史背景</label>
             <select v-model="form.novel" class="input" @change="onNovelChange">
-              <option value="三国演义">三国演义</option>
-              <option value="水浒传">水浒传</option>
-              <option value="明代">明代</option>
-              <option value="清代">清代</option>
-              <option value="西游记">西游记</option>
+              <option v-for="n in novelsData" :key="n.novel_id" :value="n.novel_name">{{ n.novel_name }}</option>
             </select>
           </div>
 
@@ -206,8 +202,11 @@ const form = ref({
   starting_points: 0
 })
 
-// 时间节点映射
-const timelineMap = {
+// 动态小说/时间节点数据（从 API 加载）
+const novelsData = ref([])
+
+// 硬编码兜底（API 不可用时使用）
+const FALLBACK_NOVELS = {
   '三国演义': ['黄巾起义', '董卓乱政', '官渡之战', '赤壁之战', '三国鼎立', '北伐中原'],
   '水浒传': ['洪太尉访道', '梁山聚义', '攻打祝家庄', '招安之路', '征讨方腊', '卸甲还乡'],
   '明代': ['洪武之治', '靖难之役', '永乐盛世', '土木堡之变', '万历乱局', '女真崛起', '闯王进京'],
@@ -241,7 +240,11 @@ const worldImageMap = {
   }
 }
 
-const timelines = computed(() => timelineMap[form.value.novel] || [])
+const timelines = computed(() => {
+  const n = novelsData.value.find(n => n.novel_name === form.value.novel)
+  if (n && n.timelines.length > 0) return n.timelines
+  return FALLBACK_NOVELS[form.value.novel] || []
+})
 
 // 根据当前小说和时间节点筛选可用角色
 const presetCharacters = computed(() => {
@@ -288,8 +291,18 @@ const loadCharacters = async () => {
   }
 }
 
-onMounted(() => {
-  loadCharacters()
+onMounted(async () => {
+  // 加载动态小说/时间节点数据
+  try {
+    const data = await gameAPI.getNovels()
+    if (data && data.length > 0) {
+      novelsData.value = data
+      form.value.novel = data[0].novel_name
+    }
+  } catch (err) {
+    console.warn('加载小说列表失败，使用硬编码兜底:', err)
+  }
+  await loadCharacters()
 })
 
 const onPresetCharacterChange = async () => {

@@ -45,7 +45,8 @@ export const gameAPI = {
   getSessions: () => api.get('/game/sessions'),
   deleteSession: (id) => api.delete(`/game/session/${id}`),
   getCharacters: (params) => api.get('/game/characters', { params }),
-  getCharacterDetail: (novel, name, timeline) => api.get(`/game/character/${encodeURIComponent(novel)}/${encodeURIComponent(name)}`, { params: { timeline } })
+  getCharacterDetail: (novel, name, timeline) => api.get(`/game/character/${encodeURIComponent(novel)}/${encodeURIComponent(name)}`, { params: { timeline } }),
+  getNovels: () => api.get('/game/novels'),
 }
 
 // 管理后台 API（需要 X-Admin-Key 请求头）
@@ -61,6 +62,38 @@ export const adminAPI = {
 
   cancelUnlimited: (userId, adminKey) =>
     api.delete('/admin/monthly-unlimited', { params: { user_id: userId }, headers: { 'X-Admin-Key': adminKey } }),
+
+  // Novel CRUD
+  listNovels: (adminKey) =>
+    api.get('/admin/novels', { headers: { 'X-Admin-Key': adminKey } }),
+  createNovel: (data, adminKey) =>
+    api.post('/admin/novels', data, { headers: { 'X-Admin-Key': adminKey } }),
+  updateNovel: (id, data, adminKey) =>
+    api.put(`/admin/novels/${id}`, data, { headers: { 'X-Admin-Key': adminKey } }),
+  deleteNovel: (id, adminKey) =>
+    api.delete(`/admin/novels/${id}`, { headers: { 'X-Admin-Key': adminKey } }),
+
+  // Timeline CRUD
+  listTimelines: (novelId, adminKey) =>
+    api.get('/admin/timelines', { params: { novel_id: novelId }, headers: { 'X-Admin-Key': adminKey } }),
+  createTimeline: (data, adminKey) =>
+    api.post('/admin/timelines', data, { headers: { 'X-Admin-Key': adminKey } }),
+  updateTimeline: (id, data, adminKey) =>
+    api.put(`/admin/timelines/${id}`, data, { headers: { 'X-Admin-Key': adminKey } }),
+  deleteTimeline: (id, adminKey) =>
+    api.delete(`/admin/timelines/${id}`, { headers: { 'X-Admin-Key': adminKey } }),
+
+  // Character CRUD
+  listCharacters: (params, adminKey) =>
+    api.get('/admin/characters', { params, headers: { 'X-Admin-Key': adminKey } }),
+  createCharacter: (data, adminKey) =>
+    api.post('/admin/characters', data, { headers: { 'X-Admin-Key': adminKey } }),
+  getCharacter: (id, adminKey) =>
+    api.get(`/admin/characters/${id}`, { headers: { 'X-Admin-Key': adminKey } }),
+  updateCharacter: (id, data, adminKey) =>
+    api.put(`/admin/characters/${id}`, data, { headers: { 'X-Admin-Key': adminKey } }),
+  deleteCharacter: (id, adminKey) =>
+    api.delete(`/admin/characters/${id}`, { headers: { 'X-Admin-Key': adminKey } }),
 }
 
 export default api

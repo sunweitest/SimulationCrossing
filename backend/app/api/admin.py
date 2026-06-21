@@ -2,15 +2,25 @@
 
 提供用户查询、追加次数、包月不限次数等功能。
 使用 Redis 存储额外配额和包月标记。
+
+新增：小说/时间节点/预设角色 CRUD 管理。
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.models import User
-from datetime import date
+from app.models.models import User, GameSession, PresetCharacter, CharacterTimeline, NovelConfig, TimelineConfig
+from app.schemas.schemas import (
+    NovelCreate, NovelUpdate, NovelResponse,
+    TimelineCreate, TimelineUpdate, TimelineResponse,
+    PresetCharacterAdminCreate, PresetCharacterAdminUpdate, PresetCharacterAdminResponse,
+    TimelineEntrySchema,
+)
+from datetime import date, datetime
+from typing import Optional
 import redis.asyncio as redis
 
 logger = logging.getLogger("admin_api")
@@ -169,3 +179,393 @@ async def cancel_monthly_unlimited(
     logger.info("ADMIN: cancel_unlimited user=%s", user_id)
 
     return {"message": f"已取消用户 {user.email or user.phone} 的本月不限次数"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 小说/历史背景 CRUD
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/novels", response_model=list[NovelResponse])
+async def list_novels(db: AsyncSession = Depends(get_db), _: bool = Depends(_verify_admin)):
+    """列出所有小说"""
+    result = await db.execute(
+        select(NovelConfig)
+        .options(selectinload(NovelConfig.timelines))
+        .order_by(NovelConfig.sort_order, NovelConfig.id)
+    )
+    novels = result.scalars().all()
+    return [
+        NovelResponse(
+            id=n.id,
+            name=n.name,
+            description=n.description,
+            sort_order=n.sort_order,
+            timeline_count=len(n.timelines) if n.timelines else 0,
+            character_count=0,
+            created_at=n.created_at,
+        )
+        for n in novels
+    ]
+
+
+@router.post("/novels", response_model=NovelResponse, status_code=201)
+async def create_novel(
+    data: NovelCreate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """创建小说"""
+    existing = await db.execute(select(NovelConfig).where(NovelConfig.name == data.name))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="该小说名称已存在")
+    novel = NovelConfig(name=data.name, description=data.description, sort_order=data.sort_order)
+    db.add(novel)
+    await db.commit()
+    await db.refresh(novel)
+    return NovelResponse(
+        id=novel.id, name=novel.name, description=novel.description,
+        sort_order=novel.sort_order, timeline_count=0, character_count=0, created_at=novel.created_at,
+    )
+
+
+@router.get("/novels/{novel_id}", response_model=NovelResponse)
+async def get_novel(
+    novel_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """获取小说详情（含时间节点列表）"""
+    result = await db.execute(
+        select(NovelConfig).options(selectinload(NovelConfig.timelines)).where(NovelConfig.id == novel_id)
+    )
+    novel = result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail="小说不存在")
+    return NovelResponse(
+        id=novel.id, name=novel.name, description=novel.description,
+        sort_order=novel.sort_order,
+        timeline_count=len(novel.timelines) if novel.timelines else 0,
+        character_count=0,
+        created_at=novel.created_at,
+    )
+
+
+@router.put("/novels/{novel_id}", response_model=NovelResponse)
+async def update_novel(
+    novel_id: int,
+    data: NovelUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """更新小说"""
+    result = await db.execute(
+        select(NovelConfig).options(selectinload(NovelConfig.timelines)).where(NovelConfig.id == novel_id)
+    )
+    novel = result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail="小说不存在")
+    if data.name is not None:
+        novel.name = data.name
+    if data.description is not None:
+        novel.description = data.description
+    if data.sort_order is not None:
+        novel.sort_order = data.sort_order
+    await db.commit()
+    await db.refresh(novel)
+    return NovelResponse(
+        id=novel.id, name=novel.name, description=novel.description,
+        sort_order=novel.sort_order,
+        timeline_count=len(novel.timelines) if novel.timelines else 0,
+        character_count=0,
+        created_at=novel.created_at,
+    )
+
+
+@router.delete("/novels/{novel_id}")
+async def delete_novel(
+    novel_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """删除小说（级联删除关联的时间节点；如有角色引用则拒绝）"""
+    result = await db.execute(select(NovelConfig).where(NovelConfig.id == novel_id))
+    novel = result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail="小说不存在")
+    # 检查是否有角色引用此小说名称
+    char_count = await db.execute(
+        select(func.count(PresetCharacter.id)).where(PresetCharacter.novel == novel.name)
+    )
+    if char_count.scalar() > 0:
+        raise HTTPException(status_code=409, detail=f"该小说下有 {char_count.scalar()} 个角色，请先删除角色")
+    # 检查是否有游戏会话引用
+    session_count = await db.execute(
+        select(func.count(GameSession.id)).where(GameSession.novel == novel.name)
+    )
+    if session_count.scalar() > 0:
+        raise HTTPException(status_code=409, detail=f"存在 {session_count.scalar()} 个游戏会话引用该小说，无法删除")
+    await db.delete(novel)
+    await db.commit()
+    return {"message": "已删除"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 时间节点 CRUD
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/timelines", response_model=list[TimelineResponse])
+async def list_timelines(
+    novel_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """列出某小说的所有时间节点"""
+    result = await db.execute(
+        select(TimelineConfig)
+        .where(TimelineConfig.novel_id == novel_id)
+        .order_by(TimelineConfig.sort_order, TimelineConfig.id)
+    )
+    timelines = result.scalars().all()
+    return [
+        TimelineResponse(
+            id=t.id, novel_id=t.novel_id, novel_name="",
+            name=t.name, description=t.description, sort_order=t.sort_order, created_at=t.created_at,
+        )
+        for t in timelines
+    ]
+
+
+@router.post("/timelines", response_model=TimelineResponse, status_code=201)
+async def create_timeline(
+    data: TimelineCreate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """创建时间节点"""
+    # 验证小说存在
+    novel = await db.get(NovelConfig, data.novel_id)
+    if not novel:
+        raise HTTPException(status_code=404, detail="小说不存在")
+    existing = await db.execute(
+        select(TimelineConfig).where(
+            TimelineConfig.novel_id == data.novel_id,
+            TimelineConfig.name == data.name,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="该时间节点已存在")
+    timeline = TimelineConfig(
+        novel_id=data.novel_id, name=data.name,
+        description=data.description, sort_order=data.sort_order,
+    )
+    db.add(timeline)
+    await db.commit()
+    await db.refresh(timeline)
+    return TimelineResponse(
+        id=timeline.id, novel_id=timeline.novel_id, novel_name=novel.name,
+        name=timeline.name, description=timeline.description,
+        sort_order=timeline.sort_order, created_at=timeline.created_at,
+    )
+
+
+@router.put("/timelines/{timeline_id}", response_model=TimelineResponse)
+async def update_timeline(
+    timeline_id: int,
+    data: TimelineUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """更新时间节点"""
+    timeline = await db.get(TimelineConfig, timeline_id)
+    if not timeline:
+        raise HTTPException(status_code=404, detail="时间节点不存在")
+    if data.name is not None:
+        timeline.name = data.name
+    if data.description is not None:
+        timeline.description = data.description
+    if data.sort_order is not None:
+        timeline.sort_order = data.sort_order
+    await db.commit()
+    await db.refresh(timeline)
+    novel = await db.get(NovelConfig, timeline.novel_id)
+    return TimelineResponse(
+        id=timeline.id, novel_id=timeline.novel_id, novel_name=novel.name if novel else "",
+        name=timeline.name, description=timeline.description,
+        sort_order=timeline.sort_order, created_at=timeline.created_at,
+    )
+
+
+@router.delete("/timelines/{timeline_id}")
+async def delete_timeline(
+    timeline_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """删除时间节点（如有角色引用则拒绝）"""
+    timeline = await db.get(TimelineConfig, timeline_id)
+    if not timeline:
+        raise HTTPException(status_code=404, detail="时间节点不存在")
+    # 检查角色时间线引用
+    ct_count = await db.execute(
+        select(func.count(CharacterTimeline.id)).where(CharacterTimeline.timeline == timeline.name)
+    )
+    if ct_count.scalar() > 0:
+        raise HTTPException(status_code=409, detail=f"有 {ct_count.scalar()} 个角色引用该时间节点，请先删除角色")
+    await db.delete(timeline)
+    await db.commit()
+    return {"message": "已删除"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 预设角色 CRUD
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/characters", response_model=list[PresetCharacterAdminResponse])
+async def list_admin_characters(
+    novel: Optional[str] = None,
+    timeline: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """列出预设角色（管理后台用，含完整时间线条目）"""
+    stmt = select(PresetCharacter).options(selectinload(PresetCharacter.timelines))
+    if novel:
+        stmt = stmt.where(PresetCharacter.novel == novel)
+    if search:
+        stmt = stmt.where(PresetCharacter.name.ilike(f"%{search}%"))
+    stmt = stmt.order_by(PresetCharacter.novel, PresetCharacter.id)
+    result = await db.execute(stmt)
+    characters = result.scalars().all()
+
+    def filter_timelines(char):
+        if not timeline:
+            return char.timelines
+        return [t for t in char.timelines if t.timeline == timeline]
+
+    return [
+        PresetCharacterAdminResponse(
+            id=c.id, novel=c.novel, name=c.name,
+            gender=c.gender, age=c.age, rank=c.rank,
+            background=c.background, starting_points=c.starting_points,
+            timelines=[
+                TimelineEntrySchema(timeline=t.timeline, background=t.background, initial_scene=t.initial_scene)
+                for t in filter_timelines(c)
+            ],
+        )
+        for c in characters
+    ]
+
+
+@router.post("/characters", response_model=PresetCharacterAdminResponse, status_code=201)
+async def create_admin_character(
+    data: PresetCharacterAdminCreate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """创建预设角色（含时间线条目）"""
+    char = PresetCharacter(
+        novel=data.novel, name=data.name,
+        gender=data.gender, age=data.age, rank=data.rank,
+        background=data.background, starting_points=data.starting_points,
+    )
+    for tl in data.timelines:
+        char.timelines.append(CharacterTimeline(
+            timeline=tl.timeline, background=tl.background, initial_scene=tl.initial_scene,
+        ))
+    db.add(char)
+    await db.commit()
+    await db.refresh(char)
+    return PresetCharacterAdminResponse(
+        id=char.id, novel=char.novel, name=char.name,
+        gender=char.gender, age=char.age, rank=char.rank,
+        background=char.background, starting_points=char.starting_points,
+        timelines=[
+            TimelineEntrySchema(timeline=t.timeline, background=t.background, initial_scene=t.initial_scene)
+            for t in char.timelines
+        ],
+    )
+
+
+@router.get("/characters/{char_id}", response_model=PresetCharacterAdminResponse)
+async def get_admin_character(
+    char_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """获取单个角色详情"""
+    result = await db.execute(
+        select(PresetCharacter).options(selectinload(PresetCharacter.timelines)).where(PresetCharacter.id == char_id)
+    )
+    char = result.scalar_one_or_none()
+    if not char:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    return PresetCharacterAdminResponse(
+        id=char.id, novel=char.novel, name=char.name,
+        gender=char.gender, age=char.age, rank=char.rank,
+        background=char.background, starting_points=char.starting_points,
+        timelines=[
+            TimelineEntrySchema(timeline=t.timeline, background=t.background, initial_scene=t.initial_scene)
+            for t in char.timelines
+        ],
+    )
+
+
+@router.put("/characters/{char_id}", response_model=PresetCharacterAdminResponse)
+async def update_admin_character(
+    char_id: int,
+    data: PresetCharacterAdminUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """更新角色（含时间线条目替换）"""
+    result = await db.execute(
+        select(PresetCharacter).options(selectinload(PresetCharacter.timelines)).where(PresetCharacter.id == char_id)
+    )
+    char = result.scalar_one_or_none()
+    if not char:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    # 更新基本字段
+    for field in ("novel", "name", "gender", "age", "rank", "background", "starting_points"):
+        val = getattr(data, field)
+        if val is not None:
+            setattr(char, field, val)
+
+    # 替换时间线条目
+    if data.timelines is not None:
+        for old_tl in list(char.timelines):
+            await db.delete(old_tl)
+        for tl in data.timelines:
+            new_tl = CharacterTimeline(
+                character_id=char.id, timeline=tl.timeline,
+                background=tl.background, initial_scene=tl.initial_scene,
+            )
+            db.add(new_tl)
+
+    await db.commit()
+    await db.refresh(char)
+    return PresetCharacterAdminResponse(
+        id=char.id, novel=char.novel, name=char.name,
+        gender=char.gender, age=char.age, rank=char.rank,
+        background=char.background, starting_points=char.starting_points,
+        timelines=[
+            TimelineEntrySchema(timeline=t.timeline, background=t.background, initial_scene=t.initial_scene)
+            for t in char.timelines
+        ],
+    )
+
+
+@router.delete("/characters/{char_id}")
+async def delete_admin_character(
+    char_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """删除角色"""
+    char = await db.get(PresetCharacter, char_id)
+    if not char:
+        raise HTTPException(status_code=404, detail="角色不存在")
+    await db.delete(char)
+    await db.commit()
+    return {"message": "已删除"}

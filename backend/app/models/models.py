@@ -115,3 +115,30 @@ class CharacterTimeline(Base):
     initial_scene = Column(Text, nullable=False)
 
     character = relationship("PresetCharacter", back_populates="timelines")
+
+
+class NovelConfig(Base):
+    """小说/历史背景配置表"""
+    __tablename__ = "novel_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    timelines = relationship("TimelineConfig", back_populates="novel", cascade="all, delete-orphan")
+
+
+class TimelineConfig(Base):
+    """时间节点配置表"""
+    __tablename__ = "timeline_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel_id = Column(Integer, ForeignKey("novel_configs.id"), nullable=False)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    novel = relationship("NovelConfig", back_populates="timelines")

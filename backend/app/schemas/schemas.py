@@ -174,3 +174,109 @@ class CharacterInfoResponse(BaseModel):
     total_characters: int
     characters: List[CharacterEntry]
     last_updated_turn: int
+
+
+# ===== 管理后台：小说/历史背景 =====
+class NovelCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    sort_order: int = 0
+
+
+class NovelUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class NovelResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    sort_order: int = 0
+    timeline_count: int = 0
+    character_count: int = 0
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ===== 管理后台：时间节点 =====
+class TimelineCreate(BaseModel):
+    novel_id: int
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    sort_order: int = 0
+
+
+class TimelineUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class TimelineResponse(BaseModel):
+    id: int
+    novel_id: int
+    novel_name: str = ""
+    name: str
+    description: Optional[str] = None
+    sort_order: int = 0
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ===== 管理后台：预设角色 =====
+class TimelineEntrySchema(BaseModel):
+    """角色时间节点条目"""
+    timeline: str = Field(..., min_length=1)
+    background: Optional[str] = None
+    initial_scene: str = Field(..., min_length=1)
+
+
+class PresetCharacterAdminCreate(BaseModel):
+    novel: str = Field(..., min_length=1, max_length=100)
+    name: str = Field(..., min_length=1)
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    rank: Optional[str] = None
+    background: Optional[str] = None
+    starting_points: int = 0
+    timelines: List[TimelineEntrySchema] = Field(default_factory=list)
+
+
+class PresetCharacterAdminUpdate(BaseModel):
+    novel: Optional[str] = Field(None, min_length=1, max_length=100)
+    name: Optional[str] = None
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    rank: Optional[str] = None
+    background: Optional[str] = None
+    starting_points: Optional[int] = None
+    timelines: Optional[List[TimelineEntrySchema]] = None
+
+
+class PresetCharacterAdminResponse(BaseModel):
+    id: int
+    novel: str
+    name: str
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    rank: Optional[str] = None
+    background: Optional[str] = None
+    starting_points: int = 0
+    timelines: List[TimelineEntrySchema] = []
+
+    class Config:
+        from_attributes = True
+
+
+# ===== 公开接口：小说时间节点 =====
+class NovelTimelineResponse(BaseModel):
+    novel_id: int
+    novel_name: str
+    description: Optional[str] = None
+    timelines: List[str] = []

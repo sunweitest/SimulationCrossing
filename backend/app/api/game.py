@@ -8,12 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
 from app.api.deps import get_current_user, get_current_active_user
-from app.models.models import User, GameSession, SceneHistory, ChoiceHistory
+from app.models.models import User, GameSession, SceneHistory, ChoiceHistory, NovelConfig, TimelineConfig
 from app.schemas.schemas import (
     GameSessionCreate, GameSessionResponse, UserAction,
     Scene, GameStateResponse, GameSessionListItem,
-    CharacterInfoResponse, CharacterEntry,
+    CharacterInfoResponse, CharacterEntry, NovelTimelineResponse,
 )
+from sqlalchemy.orm import selectinload
 from app.services.game_service import GameService, get_provider
 from app.services.scene_image_matcher import get_matcher
 from typing import Optional
@@ -35,6 +36,26 @@ async def get_available_characters(
 ):
     """获取可用预设角色列表，可按小说和时间节点筛选"""
     return await GameService.get_available_characters(db, novel=novel, timeline=timeline)
+
+
+@router.get("/novels", response_model=list[NovelTimelineResponse])
+async def get_novels(db: AsyncSession = Depends(get_db)):
+    """获取所有小说背景及其时间节点（公开接口，供角色创建页使用）"""
+    result = await db.execute(
+        select(NovelConfig)
+        .options(selectinload(NovelConfig.timelines))
+        .order_by(NovelConfig.sort_order, NovelConfig.id)
+    )
+    novels = result.scalars().all()
+    return [
+        NovelTimelineResponse(
+            novel_id=n.id,
+            novel_name=n.name,
+            description=n.description,
+            timelines=[t.name for t in sorted(n.timelines, key=lambda x: x.sort_order)],
+        )
+        for n in novels
+    ]
 
 
 @router.post("/session", response_model=GameSessionResponse)
