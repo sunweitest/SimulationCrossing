@@ -81,6 +81,48 @@ def _favorability_label(score: int) -> str:
         return "深仇大恨"
 
 
+def _inject_character_context(
+    user_input: str,
+    characters_state: Optional[Dict],
+) -> str:
+    """扫描用户输入中出现的角色名，从 characters_state 提取信息注入 prompt。
+
+    只在用户输入中匹配已有角色名，不注入全量角色列表。
+    这样 LLM 能获得角色信息而不需要 tool calling，保证流式输出不被阻塞。
+    """
+    if not characters_state:
+        return user_input
+
+    chars = characters_state.get("characters", [])
+    if not chars:
+        return user_input
+
+    # 找出用户输入中提到的角色
+    mentioned = []
+    for c in chars:
+        name = c.get("name", "")
+        if name and name in user_input:
+            mentioned.append(c)
+
+    if not mentioned:
+        return user_input
+
+    # 构建注入文本
+    lines = ["\n【当前人物关系】（基于玩家输入中提到的角色）"]
+    for c in mentioned:
+        fav = c.get("favorability", 0)
+        label = _favorability_label(fav)
+        lines.append(
+            f"- {c['name']}：{c.get('identity', '未知身份')}，"
+            f"与你的关系：{c.get('relationship_to_player', '未知')}，"
+            f"好感度：{fav}（{label}），"
+            f"状态：{c.get('status', '存活')}"
+        )
+        if c.get("last_interaction"):
+            lines.append(f"  最近互动：{c['last_interaction']}")
+
+    context = "\n".join(lines)
+    return f"{context}\n\n{user_input}"
 
 
 async def _character_tool_handler(
@@ -444,35 +486,25 @@ class GameService:
     ):
         """流式生成纯剧情文本。
 
-        如果提供了 characters_state，启用 tool calling，
-        LLM 可在生成剧情前通过 query_character() 按需查询角色信息。
+        characters_state 中的角色信息会预注入到 prompt 中，
+        不经过 tool calling，保证真正的流式输出。
         """
         provider = get_provider()
 
-        tools = None
-        tool_handler = None
-
-        if characters_state and hasattr(provider, "stream_story"):
-            cs = characters_state  # capture for closure
-            tool_handler = lambda name, args: _character_tool_handler(
-                name, args, characters_state=cs,
-            )
-            from app.services.llm.deepseek_provider import CHARACTER_TOOLS
-            tools = CHARACTER_TOOLS
+        # 预注入角色上下文到 user_input，避免 tool calling 阻塞流式输出
+        augmented_input = _inject_character_context(user_input, characters_state)
 
         if hasattr(provider, "stream_story"):
             return await provider.stream_story(
                 character_info,
-                user_input,
+                augmented_input,
                 session_id,
                 history=history,
-                tools=tools,
-                tool_handler=tool_handler,
             )
 
         raw_text, new_session_id = await provider.generate(
             character_info,
-            user_input,
+            augmented_input,
             session_id,
             history=history,
         )

@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -28,6 +29,30 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     if settings.AUTO_CREATE_TABLES:
         await init_db()
+
+    # ── 初始化场景图片匹配器 ──
+    if settings.DASHSCOPE_API_KEY:
+        try:
+            from app.services.scene_image_matcher import init_matcher
+
+            project_root = Path(__file__).resolve().parent.parent.parent
+            image_dir = project_root / settings.SCENE_IMAGE_DIR
+            cache_path = project_root / settings.SCENE_IMAGE_CACHE_PATH
+
+            await init_matcher(
+                image_dir=image_dir,
+                cache_path=cache_path,
+                api_key=settings.DASHSCOPE_API_KEY,
+            )
+            logger = logging.getLogger("main")
+            logger.info("场景图片匹配器初始化完成: %s", image_dir)
+        except Exception as e:
+            logger = logging.getLogger("main")
+            logger.warning("场景图片匹配器初始化失败（非致命）: %s", e)
+    else:
+        logger = logging.getLogger("main")
+        logger.info("DASHSCOPE_API_KEY 未配置，跳过场景图片匹配器")
+
     yield
     await close_db()
 

@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     DAILY_FREE_MESSAGES: int = 26
     DAILY_LOGGED_IN_EXTRA: int = 36
 
+    # 场景图片匹配
+    SCENE_IMAGE_DIR: str = "frontend/public/images/scene"  # 图片目录，相对项目根目录
+    SCENE_IMAGE_CACHE_PATH: str = "backend/cache/scene_embeddings.json"  # 向量缓存文件
+
     # 管理后台
     ADMIN_KEY: str = "admin-secret-change-me"
 

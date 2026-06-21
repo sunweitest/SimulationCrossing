@@ -75,6 +75,7 @@ class Scene(BaseModel):
     scene_description: str
     choices: List[str]
     game_update: GameUpdate
+    scene_image: Optional[str] = None  # 匹配的场景配图URL，无匹配时为 null
 
 
 class UserAction(BaseModel):

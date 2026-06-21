@@ -1,3 +1,4 @@
+import asyncio
 import time
 import logging
 import json
@@ -14,6 +15,7 @@ from app.schemas.schemas import (
     CharacterInfoResponse, CharacterEntry,
 )
 from app.services.game_service import GameService, get_provider
+from app.services.scene_image_matcher import get_matcher
 from typing import Optional
 
 logger = logging.getLogger("game_api")
@@ -251,6 +253,22 @@ async def perform_action(
         )
         new_scene = GameService.get_fallback_scene(action_data.action)
 
+    # 场景图片匹配（非流式端点，与 DB 更新串行即可）
+    if new_scene and new_scene.get("scene_description"):
+        matcher = get_matcher()
+        if matcher and matcher.is_ready:
+            try:
+                new_scene["scene_image"] = await matcher.find_best_match(
+                    new_scene["scene_description"]
+                )
+            except Exception as e:
+                logger.warning("ACTION: 图片匹配失败（非致命）: %s", e)
+                new_scene["scene_image"] = None
+        else:
+            new_scene["scene_image"] = None
+    else:
+        new_scene["scene_image"] = None
+
     # 更新游戏状态
     game_session.points += new_scene['game_update']['points_awarded']
     new_achievement = new_scene['game_update']['new_achievement']
@@ -392,15 +410,26 @@ async def perform_action_stream(
 
         yield _sse("status", {"phase": "metadata", "message": "行动选项生成中"})
 
-        metadata = await GameService.generate_scene_metadata(
+        # 并行：场景元数据生成 + 图片匹配
+        matcher = get_matcher()
+        metadata_coro = GameService.generate_scene_metadata(
             scene_description,
             character_info,
             action_data.action,
         )
+        image_coro = matcher.find_best_match(scene_description) if matcher and matcher.is_ready else None
+
+        if image_coro:
+            metadata, scene_image = await asyncio.gather(metadata_coro, image_coro)
+        else:
+            metadata = await metadata_coro
+            scene_image = None
+
         new_scene = {
             "scene_description": scene_description,
             "choices": metadata["choices"],
             "game_update": metadata["game_update"],
+            "scene_image": scene_image,
         }
 
         if new_session_id:

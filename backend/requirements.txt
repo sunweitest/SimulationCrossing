@@ -12,3 +12,4 @@ python-dotenv==1.0.0
 dashscope
 openai>=1.0.0
 redis==5.0.1
+numpy>=1.25.0
