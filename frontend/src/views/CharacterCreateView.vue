@@ -10,7 +10,12 @@
     <div class="top-bar">
       <h1 class="top-title">🎭 角色创建</h1>
       <span class="top-subtitle">{{ form.novel }} · {{ currentWorldImage.caption }}</span>
-      <div v-if="!authStore.isAuthenticated" class="top-auth">
+      <div v-if="authStore.isAuthenticated" class="top-auth">
+        <router-link to="/my-games" class="top-link">📋 我的游戏</router-link>
+        <span class="top-user">{{ authStore.user?.email || authStore.user?.phone || '已登录' }}</span>
+        <button class="btn btn-sm" @click="handleLogout">退出</button>
+      </div>
+      <div v-else class="top-auth">
         <span class="auth-hint">登录后可保存存档</span>
         <button class="btn btn-primary btn-sm" @click="showAuthModal = true; authModalTab = 'login'">登录</button>
         <button class="btn btn-sm" @click="showAuthModal = true; authModalTab = 'register'">注册</button>
@@ -352,6 +357,11 @@ const formatApiError = (err) => {
   return typeof detail === 'string' ? detail : detail?.message || '创建游戏会话失败'
 }
 
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/character-create')
+}
+
 const startGame = async () => {
   error.value = ''
 
@@ -456,6 +466,27 @@ const startGame = async () => {
 .auth-hint {
   font-size: 0.82rem;
   color: rgba(255,255,255,0.6);
+}
+
+.top-link {
+  color: rgba(255,215,150,0.9);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.top-link:hover {
+  color: #f0c040;
+}
+
+.top-user {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.65);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== 中央内容区 ===== */

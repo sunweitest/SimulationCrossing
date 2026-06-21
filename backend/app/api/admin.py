@@ -4,9 +4,12 @@
 使用 Redis 存储额外配额和包月标记。
 
 新增：小说/时间节点/预设角色 CRUD 管理。
+新增：角色批量导入（xlsx 模板下载/上传）。
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Header, status, Query
+import io
+from fastapi import APIRouter, Depends, HTTPException, Header, status, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -22,6 +25,14 @@ from app.schemas.schemas import (
 from datetime import date, datetime
 from typing import Optional
 import redis.asyncio as redis
+
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 logger = logging.getLogger("admin_api")
 
@@ -569,3 +580,229 @@ async def delete_admin_character(
     await db.delete(char)
     await db.commit()
     return {"message": "已删除"}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 角色批量导入（xlsx）— 必须在 /characters/{char_id} 之前注册
+# ═══════════════════════════════════════════════════════════════
+
+_XLSX_HEADERS = [
+    "小说", "姓名", "性别", "年龄", "身份",
+    "角色背景", "初始积分",
+    "时间节点", "时间节点背景", "初始场景描述",
+]
+
+_XLSX_SAMPLE = [
+    ["三国演义", "诸葛亮", "男性", 28, "军师",
+     "字孔明，号卧龙，三国时期蜀汉丞相", 80,
+     "赤壁之战", "与周瑜联手，借东风火烧曹营", "江边祭坛上，你手持羽扇，东南风渐起..."],
+    ["三国演义", "诸葛亮", "男性", 28, "军师",
+     "字孔明，号卧龙，三国时期蜀汉丞相", 80,
+     "北伐中原", "六出祁山，鞠躬尽瘁", "祁山大营中，你看着地图上的五丈原..."],
+]
+
+
+@router.get("/character-template")
+async def download_character_template(_: bool = Depends(_verify_admin)):
+    """下载角色导入 xlsx 模板"""
+    if not HAS_OPENPYXL:
+        raise HTTPException(status_code=500, detail="openpyxl 未安装")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "角色导入"
+
+    # 样式
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin"),
+    )
+
+    # 标题行
+    for col, h in enumerate(_XLSX_HEADERS, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    # 示例数据（2 行，展示同一角色多时间节点）
+    for r, row_data in enumerate(_XLSX_SAMPLE, 2):
+        for c, val in enumerate(row_data, 1):
+            cell = ws.cell(row=r, column=c, value=val)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+
+    # 列宽
+    col_widths = [14, 10, 8, 8, 10, 30, 10, 16, 30, 40]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # 冻结首行
+    ws.freeze_panes = "A2"
+
+    # Sheet2: 说明
+    ws2 = wb.create_sheet("填写说明")
+    notes = [
+        ["字段", "说明"],
+        ["小说", "必须与系统中已有小说名称一致"],
+        ["姓名", "角色姓名，与年龄一起作为唯一标识"],
+        ["性别", "男性 或 女性"],
+        ["年龄", "整数，≥18"],
+        ["身份", "如：将军、军师、士兵、读书人、文官、小吏、商人"],
+        ["角色背景", "可选，角色的背景故事描述"],
+        ["初始积分", "整数，默认0"],
+        ["时间节点", "该角色所属的时间节点名称"],
+        ["时间节点背景", "可选，该时间节点下的角色背景"],
+        ["初始场景描述", "该时间节点下的开场场景文字"],
+        ["", ""],
+        ["注意", "同一角色如有多个时间节点，请在多行中重复填写（小说/姓名/性别/年龄/身份/背景/积分保持一致）"],
+        ["导入规则", "姓名+年龄相同的视为同一角色，导入时会替换已有角色的全部数据"],
+    ]
+    for r, row_data in enumerate(notes, 1):
+        for c, val in enumerate(row_data, 1):
+            cell = ws2.cell(row=r, column=c, value=val)
+            if r == 1:
+                cell.font = Font(bold=True)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=character_import_template.xlsx"},
+    )
+
+
+@router.post("/character-import")
+async def import_characters(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """上传 xlsx 批量导入角色"""
+    if not HAS_OPENPYXL:
+        raise HTTPException(status_code=500, detail="openpyxl 未安装")
+
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(status_code=400, detail="请上传 .xlsx 文件")
+
+    try:
+        contents = await file.read()
+        wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=True)
+        ws = wb.active
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"无法读取 xlsx 文件: {e}")
+
+    rows = list(ws.iter_rows(min_row=2, values_only=True))  # 跳过标题行
+    if not rows:
+        raise HTTPException(status_code=400, detail="文件中没有数据")
+
+    # 按 (novel, name, age) 分组
+    groups: dict = {}
+    for row in rows:
+        if not row[0] or not row[1]:
+            continue  # 跳过空行
+        novel = str(row[0]).strip()
+        name = str(row[1]).strip()
+        gender = str(row[2]).strip() if row[2] else None
+        try:
+            age = int(row[3]) if row[3] else 0
+        except (ValueError, TypeError):
+            age = 0
+        rank = str(row[4]).strip() if row[4] else None
+        background = str(row[5]).strip() if row[5] else None
+        try:
+            starting_points = int(row[6]) if row[6] else 0
+        except (ValueError, TypeError):
+            starting_points = 0
+        timeline_name = str(row[7]).strip() if row[7] else None
+        timeline_bg = str(row[8]).strip() if row[8] else None
+        initial_scene = str(row[9]).strip() if row[9] else ""
+
+        key = (novel, name, age)
+        if key not in groups:
+            groups[key] = {
+                "novel": novel,
+                "name": name,
+                "gender": gender,
+                "age": age,
+                "rank": rank,
+                "background": background,
+                "starting_points": starting_points,
+                "timelines": [],
+            }
+        if timeline_name:
+            groups[key]["timelines"].append({
+                "timeline": timeline_name,
+                "background": timeline_bg,
+                "initial_scene": initial_scene,
+            })
+
+    created = 0
+    updated = 0
+    errors = []
+
+    for key, data in groups.items():
+        novel, name, age = key
+        try:
+            # 查找是否已存在同名同年龄角色
+            result = await db.execute(
+                select(PresetCharacter).options(selectinload(PresetCharacter.timelines))
+                .where(
+                    PresetCharacter.novel == data["novel"],
+                    PresetCharacter.name == data["name"],
+                    PresetCharacter.age == data["age"],
+                )
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # 更新已有角色
+                existing.novel = data["novel"]
+                existing.gender = data["gender"]
+                existing.rank = data["rank"]
+                existing.background = data["background"]
+                existing.starting_points = data["starting_points"]
+                # 替换时间线条目
+                for old_tl in list(existing.timelines):
+                    await db.delete(old_tl)
+                for tl in data["timelines"]:
+                    existing.timelines.append(CharacterTimeline(
+                        timeline=tl["timeline"],
+                        background=tl["background"],
+                        initial_scene=tl["initial_scene"],
+                    ))
+                updated += 1
+            else:
+                # 创建新角色
+                char = PresetCharacter(
+                    novel=data["novel"], name=data["name"],
+                    gender=data["gender"], age=data["age"],
+                    rank=data["rank"], background=data["background"],
+                    starting_points=data["starting_points"],
+                )
+                for tl in data["timelines"]:
+                    char.timelines.append(CharacterTimeline(
+                        timeline=tl["timeline"],
+                        background=tl["background"],
+                        initial_scene=tl["initial_scene"],
+                    ))
+                db.add(char)
+                created += 1
+        except Exception as e:
+            errors.append(f"{name}({novel}): {e}")
+
+    await db.commit()
+
+    return {
+        "message": f"导入完成：新建 {created} 个角色，更新 {updated} 个角色",
+        "created": created,
+        "updated": updated,
+        "errors": errors,
+    }

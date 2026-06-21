@@ -96,10 +96,13 @@
               <button class="btn btn-sm btn-primary" @click="openNovelForm()">+ 新建</button>
             </div>
             <div v-if="novelsLoading" class="text-muted">加载中...</div>
-            <div v-for="n in novels" :key="n.id" :class="['novel-item', { active: selectedNovel?.id === n.id }]" @click="selectNovel(n)">
+            <div v-for="(n, i) in novels" :key="n.id" :class="['novel-item', { active: selectedNovel?.id === n.id }]" @click="selectNovel(n)">
+              <span class="novel-sort">{{ n.sort_order }}</span>
               <span class="novel-name">{{ n.name }}</span>
               <span class="novel-meta">{{ n.timeline_count }} 时间线</span>
               <div class="novel-actions">
+                <button class="btn-icon" @click.stop="moveNovel(i, -1)" :disabled="i===0" title="上移">▲</button>
+                <button class="btn-icon" @click.stop="moveNovel(i, 1)" :disabled="i===novels.length-1" title="下移">▼</button>
                 <button class="btn-icon" @click.stop="openNovelForm(n)" title="编辑">✏️</button>
                 <button class="btn-icon" @click.stop="deleteNovelConfirm(n)" title="删除">🗑️</button>
               </div>
@@ -180,7 +183,19 @@
           </select>
           <input v-model="charFilterSearch" class="input" placeholder="搜索角色名..." style="max-width:200px" @keyup.enter="loadAdminCharacters" />
           <button class="btn btn-primary" @click="loadAdminCharacters">筛选</button>
-          <button class="btn btn-primary" @click="openCharForm()" style="margin-left:auto">+ 新建角色</button>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            <button class="btn" @click="downloadTemplate">📥 模板</button>
+            <label class="btn btn-primary" style="cursor:pointer">
+              📤 批量导入
+              <input type="file" accept=".xlsx,.xls" @change="handleFileUpload" style="display:none" />
+            </label>
+          </div>
+          <button class="btn btn-primary" @click="openCharForm()">+ 新建角色</button>
+        </div>
+
+        <div v-if="importResult" :class="importResult.errors?.length ? 'toast toast-error' : 'toast toast-success'" style="position:static;margin-bottom:16px;transform:none;">
+          {{ importResult.message }}
+          <span v-if="importResult.errors?.length">（{{ importResult.errors.length }} 个错误）</span>
         </div>
 
         <div v-if="adminCharactersLoading" class="text-muted" style="padding:2rem;text-align:center">加载中...</div>
@@ -350,6 +365,17 @@ const loadNovels = async () => {
   finally { novelsLoading.value = false }
 }
 
+const moveNovel = async (index, direction) => {
+  const a = novels.value[index]
+  const b = novels.value[index + direction]
+  if (!a || !b) return
+  const tmp = a.sort_order
+  // 交换排序值
+  await adminAPI.updateNovel(a.id, { sort_order: b.sort_order }, adminKey.value)
+  await adminAPI.updateNovel(b.id, { sort_order: tmp }, adminKey.value)
+  await loadNovels()
+}
+
 const selectNovel = async (n) => {
   selectedNovel.value = n
   timelinesLoading.value = true
@@ -506,6 +532,57 @@ const execCharDelete = async () => {
     charDeleteTarget.value = null; await loadAdminCharacters(); showMessage('已删除')
   } catch (err) { deleteError.value = err.response?.data?.detail || '删除失败' }
   finally { deleting.value = false }
+}
+
+// ====== 批量导入 ======
+const importResult = ref(null)
+
+const downloadTemplate = () => {
+  const a = document.createElement('a')
+  a.href = `/api/admin/characters/template`
+  // Pass admin key via query param for simplicity
+  a.href += `?token=${encodeURIComponent(adminKey.value)}`
+  // Actually, we need to use the header. Let's use a fetch-based download instead.
+  // Since it's a GET with header, we use fetch + blob
+  fetch('/api/admin/character-template', {
+    headers: { 'X-Admin-Key': adminKey.value }
+  })
+    .then(r => {
+      if (!r.ok) throw new Error('下载失败')
+      return r.blob()
+    })
+    .then(blob => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'character_import_template.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+    .catch(err => showMessage(err.message || '模板下载失败', 'error'))
+}
+
+const handleFileUpload = async (e) => {
+  const file = e.target.files?.[0]
+  if (!file) return
+  importResult.value = null
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const resp = await fetch('/api/admin/character-import', {
+      method: 'POST',
+      headers: { 'X-Admin-Key': adminKey.value },
+      body: formData,
+    })
+    const data = await resp.json()
+    if (!resp.ok) throw new Error(data.detail || '导入失败')
+    importResult.value = data
+    showMessage(data.message)
+    await loadAdminCharacters()
+  } catch (err) {
+    showMessage(err.message || '导入失败', 'error')
+  }
+  e.target.value = ''  // reset file input
 }
 
 // ====== 初始化 ======
@@ -710,6 +787,15 @@ textarea.input { resize: vertical; font-family: inherit; }
 .novel-item:hover { background: #21262d; }
 .novel-item.active { background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.3); }
 
+.novel-sort {
+  font-size: 0.75rem;
+  color: #58a6ff;
+  background: rgba(88,166,255,0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  min-width: 22px;
+  text-align: center;
+}
 .novel-name { font-weight: 600; flex: 1; }
 .novel-meta { font-size: 0.82rem; color: #8b949e; }
 .novel-actions { display: flex; gap: 4px; opacity: 0.3; transition: opacity 0.15s; }
