@@ -33,6 +33,7 @@ app/
 ├── services/            # 业务逻辑
 │   ├── game_service.py  # 上下文构建/压缩/LLM调用/JSON解析
 │   ├── context_compressor.py  # 文本摘要 + 角色 JSON 提取
+│   ├── scene_image_matcher.py  # 场景图片向量匹配（embedding+余弦相似度）
 │   └── llm/             # LLM Provider 抽象
 │       ├── base.py      # 抽象基类
 │       ├── deepseek_provider.py  # DeepSeek (OpenAI 兼容)
@@ -47,8 +48,12 @@ app/
 
 ```
 game.py: POST /api/game/action
-  → GameService.build_conversation_history()     # 组装 messages + 摘要
-  → GameService.call_llm_api()                   # 预过滤角色 + 启用 tool calling
+  → GameService.stream_story_text()               # 流式：注入角色上下文 → SSE 逐字推送 story_chunk
+  → 并行: asyncio.gather(
+      GameService.generate_scene_metadata(),       # 生成选项 + 游戏更新
+      SceneImageMatcher.find_best_match(),         # 向量匹配场景图片
+    )
+  → 或 call_llm_api()（非流式）                   # 预过滤角色 + 启用 tool calling
     → DeepSeekProvider.generate()
       → _assemble_messages()                     # system prompt + 摘要前缀 + 历史 + 用户消息
       → tool call loop（最多 3 轮）              # LLM 主动 query_character()
@@ -63,6 +68,15 @@ game.py: POST /api/game/action
 2. **角色提取**（`deepseek-v4-flash`，低温 0.2）：从摘要中提取结构化人物数据，存入 `characters_state` JSON 列。每次增量合并——旧人物保留/更新，新人物追加。失败不影响摘要存储，下次重试。
 
 触发条件：`total_turns > CONTEXT_COMPRESSION_THRESHOLD (6)`。压缩后只保留最近 `CONTEXT_RECENT_TURNS (3)` 轮完整对话。
+
+### 场景图片匹配
+
+启动时通过 DashScope `text-embedding-v4` 将 `frontend/public/images/scene/` 中的图片文件名（中文描述）转为 1024 维向量，缓存到 `backend/cache/scene_embeddings.json`。运行时将 LLM 生成的剧情文本嵌入后，通过余弦相似度（numpy 点积）匹配最佳场景图，作为全屏背景显示。
+
+- **文件指纹**：SHA-256(filename+size 排序列表) 检测图片增删改，变化时自动重建缓存
+- **匹配阈值**：`_MATCH_THRESHOLD = 0.26`，低于此值不返回图片（回退到世界背景图）
+- **并行执行**：流式端点中 `asyncio.gather(metadata_generation, image_matching)` 并行，不增加延迟
+- **图片服务**：通过 Vite `public/` 目录提供，URL 格式 `/images/scene/{filename}`
 
 ### 角色按需查询（替代全量注入）
 

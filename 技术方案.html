@@ -107,8 +107,8 @@
   </tr>
   <tr>
     <td><span class="tag tag-ai">AI 引擎</span></td>
-    <td>DashScope (通义千问)</td>
-    <td>4 个应用分别对应三国/水浒/明代/清代</td>
+    <td>DeepSeek (OpenAI 兼容) + DashScope (通义千问/embedding)</td>
+    <td>双 Provider 模式，LLM_PROVIDER 配置切换；text-embedding-v4 做场景图片匹配</td>
   </tr>
 </table>
 
@@ -152,7 +152,9 @@ SimulationCrossing/
 │   │   ├── schemas/
 │   │   │   └── schemas.py         # Pydantic 请求/响应模型
 │   │   ├── services/
-│   │   │   └── game_service.py    # 游戏逻辑（预设角色、LLM 调用、JSON 解析）
+│   │   │   ├── game_service.py    # 游戏逻辑（预设角色、LLM 调用、JSON 解析）
+│   │   │   ├── context_compressor.py # 上下文压缩（摘要 + 角色提取）
+│   │   │   ├── scene_image_matcher.py # 场景图片向量匹配（embedding）
 │   │   └── middleware/
 │   │       └── rate_limit.py      # Redis 限流中间件
 │   ├── alembic/                   # 数据库迁移
@@ -179,7 +181,7 @@ SimulationCrossing/
 │   │   └── router/index.js
 │   ├── vite.config.js             # Vite 配置（代理 /api → :8000）
 │   └── package.json
-├── images/                        # 小说封面图片
+├── images/scene/                  # 场景图片（11张，用于向量匹配）
 ├── qwen_python.py                 # Streamlit 原始 Demo（参考）
 └── 技术方案.html                   # 本文件
 </pre>
@@ -334,6 +336,7 @@ npm run dev</pre>
   <li><strong>Redis 限流降级：</strong>Redis 不可用时自动放行，不阻断游戏体验。</li>
   <li><strong>LLM 返回解析容错：</strong>JSON 提取失败时使用 fallback 场景，确保游戏不中断。</li>
   <li><strong>角色-时间节点约束：</strong>预设角色在 <code>timeline_scenes</code> 中定义合法时间节点，API 层强制校验。</li>
+  <li><strong>场景图片向量匹配：</strong>启动时用 text-embedding-v4 将图片文件名（中文描述）转为 1024 维向量缓存到磁盘。运行时嵌入剧情文本 → 余弦相似度匹配最佳图，作为全屏背景。文件指纹（SHA-256）自动检测增删改并重建缓存。</li>
 </ul>
 
 </body>

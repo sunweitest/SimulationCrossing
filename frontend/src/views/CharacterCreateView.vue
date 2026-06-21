@@ -1,168 +1,168 @@
 <template>
-  <div class="container">
-    <!-- 认证栏 -->
-    <div v-if="!authStore.isAuthenticated" class="auth-bar">
-      <span class="auth-hint">登录后可查看和管理游戏存档</span>
-      <div class="auth-buttons">
+  <div class="create-immersive">
+    <!-- 全屏背景 -->
+    <div class="create-bg" :style="{ backgroundImage: `url(${currentWorldImage.src})` }"></div>
+
+    <!-- 登录/注册弹窗 -->
+    <AuthModal v-model:visible="showAuthModal" :initial-tab="authModalTab" />
+
+    <!-- 顶部栏 -->
+    <div class="top-bar">
+      <h1 class="top-title">🎭 角色创建</h1>
+      <span class="top-subtitle">{{ form.novel }} · {{ currentWorldImage.caption }}</span>
+      <div v-if="!authStore.isAuthenticated" class="top-auth">
+        <span class="auth-hint">登录后可保存存档</span>
         <button class="btn btn-primary btn-sm" @click="showAuthModal = true; authModalTab = 'login'">登录</button>
         <button class="btn btn-sm" @click="showAuthModal = true; authModalTab = 'register'">注册</button>
       </div>
     </div>
 
-    <h1>🎭 角色创建</h1>
-
-    <!-- 登录/注册弹窗 -->
-    <AuthModal v-model:visible="showAuthModal" :initial-tab="authModalTab" />
-
-    <section class="world-visual" :style="{ backgroundImage: `url(${currentWorldImage.src})` }">
-      <div class="world-visual-overlay">
-        <span>{{ form.novel }}</span>
-        <strong>{{ currentWorldImage.caption }}</strong>
-      </div>
-    </section>
-
-    <div class="grid grid-2">
-      <!-- 左侧：角色创建表单 -->
-      <div class="card">
-        <h2>选择穿越设定</h2>
-
-        <div class="input-group">
-          <label>选择小说/历史背景</label>
-          <select v-model="form.novel" class="input" @change="onNovelChange">
-            <option value="三国演义">三国演义</option>
-            <option value="水浒传">水浒传</option>
-            <option value="明代">明代</option>
-            <option value="清代">清代</option>
-            <option value="西游记">西游记</option>
-          </select>
-        </div>
-
-        <div class="input-group">
-          <label>选择时间节点</label>
-          <select v-model="form.timeline" class="input">
-            <option v-for="timeline in timelines" :key="timeline" :value="timeline">
-              {{ timeline }}
-            </option>
-          </select>
-        </div>
-
-        <div class="input-group">
-          <label>角色类型</label>
-          <div class="radio-group">
-            <label class="radio-label">
-              <input type="radio" v-model="characterType" value="preset" />
-              选择已有角色
-            </label>
-            <label class="radio-label">
-              <input type="radio" v-model="characterType" value="custom" />
-              创建自定义角色
-            </label>
-          </div>
-        </div>
-
-        <!-- 预设角色选择 -->
-        <div v-if="characterType === 'preset'" class="input-group">
-          <label>选择角色</label>
-          <select v-model="selectedPresetCharacter" class="input" @change="onPresetCharacterChange">
-            <option value="">请选择...</option>
-            <option v-for="char in presetCharacters" :key="char" :value="char">
-              {{ char }}
-            </option>
-          </select>
-        </div>
-
-        <!-- 自定义角色 -->
-        <div v-if="characterType === 'custom'">
-          <div class="input-group">
-            <label>角色姓名</label>
-            <input v-model="form.name" type="text" class="input" placeholder="输入角色姓名" />
-          </div>
-
-          <div class="grid grid-2">
-            <div class="input-group">
-              <label>性别</label>
-              <select v-model="form.gender" class="input">
-                <option>男性</option>
-                <option>女性</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label>年龄</label>
-              <input v-model.number="form.age" type="number" class="input" min="18" />
-            </div>
-          </div>
+    <!-- 中央内容区 -->
+    <div class="create-content">
+      <div class="card-grid">
+        <!-- 左侧：角色创建表单 -->
+        <div class="glass-card">
+          <h2>选择穿越设定</h2>
 
           <div class="input-group">
-            <label>初始身份</label>
-            <select v-model="form.rank" class="input">
-              <option>将军</option>
-              <option>军师</option>
-              <option>士兵</option>
-              <option>读书人</option>
-              <option>文官</option>
-              <option>小吏</option>
-              <option>商人</option>
-              <option>未知</option>
+            <label>选择小说/历史背景</label>
+            <select v-model="form.novel" class="input" @change="onNovelChange">
+              <option value="三国演义">三国演义</option>
+              <option value="水浒传">水浒传</option>
+              <option value="明代">明代</option>
+              <option value="清代">清代</option>
+              <option value="西游记">西游记</option>
             </select>
           </div>
 
           <div class="input-group">
-            <label>角色背景（可选）</label>
-            <textarea v-model="form.background" class="input" rows="4" placeholder="描述角色的背景故事..."></textarea>
+            <label>选择时间节点</label>
+            <select v-model="form.timeline" class="input">
+              <option v-for="timeline in timelines" :key="timeline" :value="timeline">
+                {{ timeline }}
+              </option>
+            </select>
           </div>
+
+          <div class="input-group">
+            <label>角色类型</label>
+            <div class="radio-group">
+              <label class="radio-label">
+                <input type="radio" v-model="characterType" value="preset" />
+                选择已有角色
+              </label>
+              <label class="radio-label">
+                <input type="radio" v-model="characterType" value="custom" />
+                创建自定义角色
+              </label>
+            </div>
+          </div>
+
+          <!-- 预设角色选择 -->
+          <div v-if="characterType === 'preset'" class="input-group">
+            <label>选择角色</label>
+            <select v-model="selectedPresetCharacter" class="input" @change="onPresetCharacterChange">
+              <option value="">请选择...</option>
+              <option v-for="char in presetCharacters" :key="char" :value="char">
+                {{ char }}
+              </option>
+            </select>
+          </div>
+
+          <!-- 自定义角色 -->
+          <div v-if="characterType === 'custom'">
+            <div class="input-group">
+              <label>角色姓名</label>
+              <input v-model="form.name" type="text" class="input" placeholder="输入角色姓名" />
+            </div>
+
+            <div class="grid grid-2">
+              <div class="input-group">
+                <label>性别</label>
+                <select v-model="form.gender" class="input">
+                  <option>男性</option>
+                  <option>女性</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label>年龄</label>
+                <input v-model.number="form.age" type="number" class="input" min="18" />
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>初始身份</label>
+              <select v-model="form.rank" class="input">
+                <option>将军</option>
+                <option>军师</option>
+                <option>士兵</option>
+                <option>读书人</option>
+                <option>文官</option>
+                <option>小吏</option>
+                <option>商人</option>
+                <option>未知</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>角色背景（可选）</label>
+              <textarea v-model="form.background" class="input" rows="4" placeholder="描述角色的背景故事..."></textarea>
+            </div>
+          </div>
+
+          <div v-if="error" class="error-message">{{ error }}</div>
+
+          <button @click="startGame" class="btn btn-primary btn-block btn-start" :disabled="loading">
+            {{ loading ? '⏳ 穿越中...' : '🚀 开始穿越' }}
+          </button>
         </div>
 
-        <div v-if="error" class="error-message">{{ error }}</div>
-
-        <button @click="startGame" class="btn btn-primary btn-block" :disabled="loading">
-          {{ loading ? '穿越中...' : '开始穿越' }}
-        </button>
-      </div>
-
-      <!-- 右侧：角色预览 -->
-      <div class="card">
-        <h2>角色预览</h2>
-        <div v-if="previewCharacter" class="character-preview">
-          <div class="preview-item">
-            <span class="label">姓名:</span>
-            <span class="value">{{ previewCharacter.name }}</span>
+        <!-- 右侧：角色预览 -->
+        <div class="glass-card">
+          <h2>角色预览</h2>
+          <div v-if="previewCharacter" class="character-preview">
+            <div class="preview-item">
+              <span class="label">姓名</span>
+              <span class="value">{{ previewCharacter.name }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">性别</span>
+              <span class="value">{{ previewCharacter.gender }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">年龄</span>
+              <span class="value">{{ previewCharacter.age }}岁</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">身份</span>
+              <span class="value">{{ previewCharacter.rank }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">世界</span>
+              <span class="value">{{ form.novel }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">时间</span>
+              <span class="value">{{ form.timeline }}</span>
+            </div>
+            <div class="preview-item">
+              <span class="label">初始积分</span>
+              <span class="value preview-points">{{ previewCharacter.starting_points }}</span>
+            </div>
+            <div v-if="previewCharacter.background" class="preview-item preview-bg">
+              <span class="label">背景</span>
+              <p class="value">{{ previewCharacter.background }}</p>
+            </div>
+            <div class="preview-badge">
+              <span v-if="characterType === 'preset'" class="badge badge-success">🎭 经典角色</span>
+              <span v-else class="badge">✨ 自定义角色</span>
+            </div>
           </div>
-          <div class="preview-item">
-            <span class="label">性别:</span>
-            <span class="value">{{ previewCharacter.gender }}</span>
+          <div v-else class="preview-empty">
+            <span class="empty-icon">📋</span>
+            <span>请选择或创建角色</span>
           </div>
-          <div class="preview-item">
-            <span class="label">年龄:</span>
-            <span class="value">{{ previewCharacter.age }}岁</span>
-          </div>
-          <div class="preview-item">
-            <span class="label">身份:</span>
-            <span class="value">{{ previewCharacter.rank }}</span>
-          </div>
-          <div class="preview-item">
-            <span class="label">世界:</span>
-            <span class="value">{{ form.novel }}</span>
-          </div>
-          <div class="preview-item">
-            <span class="label">时间:</span>
-            <span class="value">{{ form.timeline }}</span>
-          </div>
-          <div class="preview-item">
-            <span class="label">初始积分:</span>
-            <span class="value badge badge-warning">{{ previewCharacter.starting_points }}</span>
-          </div>
-          <div v-if="previewCharacter.background" class="preview-item">
-            <span class="label">背景:</span>
-            <p class="value">{{ previewCharacter.background }}</p>
-          </div>
-          <div class="preview-badge">
-            <span v-if="characterType === 'preset'" class="badge badge-success">🎭 经典角色</span>
-            <span v-else class="badge">✨ 自定义角色</span>
-          </div>
-        </div>
-        <div v-else class="text-center text-muted">
-          请选择或创建角色
         </div>
       </div>
     </div>
@@ -384,60 +384,148 @@ const startGame = async () => {
 </script>
 
 <style scoped>
-/* 认证栏 */
-.auth-bar {
+/* ===== 全屏沉浸布局 ===== */
+.create-immersive {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: #f0e6d3;
+}
+
+/* 背景图 */
+.create-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.create-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* ===== 顶部栏 ===== */
+.top-bar {
+  position: relative;
+  z-index: 10;
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  gap: 1.5rem;
+  padding: 16px 28px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%);
+}
+
+.top-title {
+  font-size: 1.3rem;
+  margin: 0;
+  color: #f0e6d3;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  white-space: nowrap;
+}
+
+.top-subtitle {
   font-size: 0.9rem;
+  color: rgba(255,215,150,0.8);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+}
+
+.top-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-left: auto;
 }
 
 .auth-hint {
-  color: var(--text-light);
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.6);
 }
 
-.auth-buttons {
+/* ===== 中央内容区 ===== */
+.create-content {
+  position: relative;
+  z-index: 5;
+  height: calc(100vh - 76px);
+  overflow-y: auto;
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
 }
 
-.world-visual {
-  min-height: 260px;
-  margin-bottom: 2rem;
-  border-radius: 8px;
-  overflow: hidden;
-  background-size: cover;
-  background-position: center;
-  border: 2px solid var(--border-color);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  align-items: flex-end;
-}
-
-.world-visual-overlay {
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
   width: 100%;
-  padding: 2rem;
-  color: white;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(18, 18, 18, 0.78));
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  max-width: 1000px;
 }
 
-.world-visual-overlay span {
-  display: block;
-  font-size: 1rem;
-  margin-bottom: 0.35rem;
+/* ===== 玻璃卡片 ===== */
+.glass-card {
+  background: rgba(10, 10, 25, 0.2);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 215, 150, 0.12);
+  border-radius: 14px;
+  padding: 24px 28px;
+  color: #f0e6d3;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
 }
 
-.world-visual-overlay strong {
+.glass-card h2 {
+  margin: 0 0 16px;
+  font-size: 1.15rem;
+  color: rgba(255,215,150,0.9);
+  border-bottom: 1px solid rgba(255,215,150,0.15);
+  padding-bottom: 10px;
+}
+
+/* ===== 表单元素 ===== */
+.input-group {
+  margin-bottom: 14px;
+}
+
+.input-group label {
   display: block;
-  font-size: 1.75rem;
-  line-height: 1.25;
+  font-size: 0.85rem;
+  margin-bottom: 5px;
+  color: rgba(255,255,255,0.75);
+}
+
+.input, select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,215,150,0.2);
+  background: rgba(0,0,0,0.35);
+  color: #f0e6d3;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input:focus, select:focus {
+  border-color: rgba(255,215,150,0.5);
+}
+
+select option {
+  background: #1a1a2e;
+  color: #f0e6d3;
+}
+
+.input::placeholder {
+  color: rgba(255,255,255,0.35);
+}
+
+textarea.input {
+  resize: vertical;
+  font-family: inherit;
 }
 
 .radio-group {
@@ -448,18 +536,29 @@ const startGame = async () => {
 .radio-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   cursor: pointer;
+  font-size: 0.9rem;
 }
 
+/* ===== 按钮 ===== */
+.btn-start {
+  margin-top: 8px;
+  padding: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+/* ===== 角色预览 ===== */
 .character-preview {
-  padding: 1rem;
+  padding: 0;
 }
 
 .preview-item {
   display: flex;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border-color);
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .preview-item:last-child {
@@ -468,13 +567,28 @@ const startGame = async () => {
 
 .preview-item .label {
   font-weight: 600;
-  min-width: 100px;
-  color: var(--text-color);
+  min-width: 80px;
+  color: rgba(255,215,150,0.8);
+  font-size: 0.88rem;
 }
 
 .preview-item .value {
   flex: 1;
-  color: var(--text-light);
+  color: #f0e6d3;
+  font-size: 0.92rem;
+}
+
+.preview-points {
+  color: #f0c040 !important;
+  font-weight: 700;
+}
+
+.preview-bg {
+  flex-direction: column;
+}
+
+.preview-bg .label {
+  margin-bottom: 4px;
 }
 
 .preview-badge {
@@ -482,31 +596,74 @@ const startGame = async () => {
   text-align: center;
 }
 
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: rgba(255,255,255,0.4);
+  gap: 0.5rem;
+}
+
+.empty-icon {
+  font-size: 2rem;
+}
+
+/* ===== 错误信息 ===== */
 .error-message {
-  padding: 0.75rem;
-  background: var(--error-color);
-  color: white;
+  padding: 0.7rem 1rem;
+  background: rgba(248, 113, 113, 0.2);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: #fca5a5;
   border-radius: 8px;
   margin-bottom: 1rem;
   text-align: center;
+  font-size: 0.88rem;
 }
 
-textarea.input {
-  resize: vertical;
-  font-family: inherit;
-}
-
+/* ===== 响应式 ===== */
 @media (max-width: 768px) {
-  .world-visual {
-    min-height: 190px;
+  .top-bar {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
-  .world-visual-overlay {
-    padding: 1.25rem;
+  .top-title {
+    font-size: 1.1rem;
   }
 
-  .world-visual-overlay strong {
-    font-size: 1.3rem;
+  .top-subtitle {
+    font-size: 0.78rem;
+    width: 100%;
+    order: 3;
+  }
+
+  .top-auth {
+    margin-left: 0;
+  }
+
+  .create-content {
+    height: calc(100vh - 100px);
+    align-items: flex-start;
+    padding: 12px;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    max-width: 100%;
+  }
+
+  .glass-card {
+    padding: 18px 16px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .card-grid {
+    max-width: 1200px;
   }
 }
 </style>

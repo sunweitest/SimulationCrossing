@@ -433,7 +433,7 @@ const newGame = () => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ffd796;
+  background: #4ade80;
   margin-left: 8px;
   animation: stream-pulse 0.8s ease-in-out infinite;
   vertical-align: middle;
@@ -455,7 +455,7 @@ const newGame = () => {
   max-width: 900px;
   height: 55vh;
   max-height: 520px;
-  background: rgba(10, 10, 25, 0.65);
+  background: rgba(10, 10, 25, 0.2);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255, 215, 150, 0.15);
