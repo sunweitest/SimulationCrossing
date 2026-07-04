@@ -1,4 +1,35 @@
+# Dependencies
 /frontend/node_modules/
-*.png
+
+# Build output
+/frontend/dist/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+.env.production
+backend/.env
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# Logs & cache
 logs/
-backend/cache
+backend/cache/
+backend/logs/
+*.log
+
+# Images
+*.png
+
+# Claude
+.claude/
+CLAUDE.md

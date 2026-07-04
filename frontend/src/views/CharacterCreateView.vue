@@ -95,14 +95,38 @@
             <div class="input-group">
               <label>初始身份</label>
               <select v-model="form.rank" class="input">
-                <option>将军</option>
-                <option>军师</option>
-                <option>士兵</option>
-                <option>读书人</option>
-                <option>文官</option>
-                <option>小吏</option>
-                <option>商人</option>
-                <option>未知</option>
+                <optgroup label="皇族贵胄">
+                  <option>皇帝</option>
+                  <option>皇后</option>
+                  <option>太子</option>
+                  <option>皇子</option>
+                  <option>公主</option>
+                  <option>王爷</option>
+                  <option>王妃</option>
+                  <option>贵妃</option>
+                </optgroup>
+                <optgroup label="将相官吏">
+                  <option>将军</option>
+                  <option>军师</option>
+                  <option>士兵</option>
+                  <option>文官</option>
+                  <option>小吏</option>
+                  <option>太监</option>
+                </optgroup>
+                <optgroup label="江湖民间">
+                  <option>侠客</option>
+                  <option>读书人</option>
+                  <option>商人</option>
+                  <option>大小姐</option>
+                  <option>平民</option>
+                  <option>宫女</option>
+                  <option>道士</option>
+                  <option>僧人</option>
+                  <option>郎中</option>
+                </optgroup>
+                <optgroup label="其他">
+                  <option>未知</option>
+                </optgroup>
               </select>
             </div>
 
