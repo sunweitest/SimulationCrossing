@@ -40,7 +40,7 @@ services:
       MINGDAI_APP_ID: ${MINGDAI_APP_ID}
       QINGDAI_APP_ID: ${QINGDAI_APP_ID}
     env_file:
-      - .env.production
+      - backend/.env.example
     depends_on:
       postgres:
         condition: service_healthy
