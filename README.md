@@ -31,8 +31,8 @@
    - 未登录用户也可体验
 
 2. **次数限制**
-   - 未登录用户: 每日26次消息(基于IP+User-Agent指纹)
-   - 已登录用户: 每日36次消息(26+10)
+   - 未登录用户: 每日6次消息(基于IP+User-Agent指纹)
+   - 已登录用户: 每日8次消息(6+2)
    - Redis缓存实现,自动过期
 
 3. **角色创建**
@@ -256,6 +256,10 @@ npm run build
 - 自定义剧本市场
 - 广告收入
 
+### 社区互动
+- 首页底部「联系作者反馈」按钮（QQ: 1306344250）
+- 首页底部「Git仓库欢迎贡献代码」按钮
+
 ### 社交功能
 - 剧情分享
 - 排行榜系统
@@ -279,9 +283,14 @@ npm run build
 ### 4. 数据库初始化失败
 删除game.db文件,重新启动后端自动创建
 
+## 相关链接
+
+- GitHub: [https://github.com/sunweitest/SimulationCrossing](https://github.com/sunweitest/SimulationCrossing)
+- 作者反馈: QQ 1306344250
+
 ## 开发团队
 
-项目由Claude Code辅助开发完成
+项目由 AI 辅助开发完成
 
 ## 许可证
 
