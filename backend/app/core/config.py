@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
 
     # 次数限制配置
-    DAILY_FREE_MESSAGES: int = 26
-    DAILY_LOGGED_IN_EXTRA: int = 36
+    DAILY_FREE_MESSAGES: int = 6
+    DAILY_LOGGED_IN_EXTRA: int = 2
 
     # 场景图片匹配
     SCENE_IMAGE_DIR: str = "frontend/public/images/scene"  # 图片目录，相对项目根目录

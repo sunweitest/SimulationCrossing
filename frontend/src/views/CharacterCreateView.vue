@@ -191,6 +191,17 @@
         </div>
       </div>
     </div>
+
+    <!-- 底部链接 -->
+    <div class="create-footer">
+      <a href="tencent://message/?uin=1306344250" class="footer-btn footer-btn-feedback">
+        💬 联系作者反馈
+        <span class="footer-qq">QQ: 1306344250</span>
+      </a>
+      <a href="https://github.com/sunweitest/SimulationCrossing" target="_blank" class="footer-btn footer-btn-github">
+        ⭐ Git仓库欢迎贡献代码
+      </a>
+    </div>
   </div>
 </template>
 
@@ -517,7 +528,7 @@ const startGame = async () => {
 .create-content {
   position: relative;
   z-index: 5;
-  height: calc(100vh - 76px);
+  height: calc(100vh - 76px - 52px);
   overflow-y: auto;
   display: flex;
   align-items: center;
@@ -690,6 +701,60 @@ textarea.input {
   font-size: 0.88rem;
 }
 
+/* ===== 底部链接 ===== */
+.create-footer {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  padding: 10px 28px;
+}
+
+.footer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 7px 18px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.25s;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.footer-btn-feedback {
+  background: rgba(255,215,150,0.12);
+  border: 1px solid rgba(255,215,150,0.25);
+  color: rgba(255,215,150,0.9);
+}
+
+.footer-btn-feedback:hover {
+  background: rgba(255,215,150,0.22);
+  border-color: rgba(255,215,150,0.45);
+  color: #f0c040;
+}
+
+.footer-qq {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.footer-btn-github {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.8);
+}
+
+.footer-btn-github:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
   .top-bar {
@@ -713,7 +778,7 @@ textarea.input {
   }
 
   .create-content {
-    height: calc(100vh - 100px);
+    height: calc(100vh - 100px - 52px);
     align-items: flex-start;
     padding: 12px;
   }
