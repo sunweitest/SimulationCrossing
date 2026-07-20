@@ -160,6 +160,9 @@ const statusClass = (status) => {
   max-width: 1200px;
   padding-top: 2rem;
   padding-bottom: 3rem;
+  color: #e0e0e0;
+  min-height: 100vh;
+  background: #1a1a2e;
 }
 
 .header {
@@ -173,6 +176,7 @@ const statusClass = (status) => {
 .header h1 {
   margin: 0;
   flex: 1;
+  color: #f0f0f0;
 }
 
 .header-info {
@@ -180,20 +184,22 @@ const statusClass = (status) => {
   align-items: center;
   gap: 0.75rem;
   font-size: 0.9rem;
-  color: var(--text-muted);
+  color: #8b949e;
 }
 
 .turn-badge {
-  background: rgba(102, 126, 234, 0.15);
-  color: #667eea;
+  background: rgba(102, 126, 234, 0.2);
+  color: #8fadff;
   padding: 0.2rem 0.6rem;
   border-radius: 12px;
   font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .empty-state {
   text-align: center;
   padding: 4rem 1rem;
+  color: #8b949e;
 }
 
 .empty-state p {
@@ -212,16 +218,17 @@ const statusClass = (status) => {
 }
 
 .character-card {
-  background: var(--card-bg, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
+  backdrop-filter: blur(8px);
 }
 
 .character-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* 状态边框颜色 */
@@ -236,14 +243,14 @@ const statusClass = (status) => {
   align-items: center;
   justify-content: space-between;
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .char-name {
   font-size: 1.15rem;
   font-weight: 700;
-  color: var(--text-color);
+  color: #f0f0f0;
 }
 
 .char-status {
@@ -253,11 +260,11 @@ const statusClass = (status) => {
   font-weight: 600;
 }
 
-.char-status.status-alive { background: rgba(74, 222, 128, 0.15); color: #4ade80; }
-.char-status.status-dead { background: rgba(107, 114, 128, 0.15); color: #9ca3af; }
-.char-status.status-gone { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-.char-status.status-hostile { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
-.char-status.status-allied { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.char-status.status-alive { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+.char-status.status-dead { background: rgba(107, 114, 128, 0.18); color: #9ca3af; }
+.char-status.status-gone { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+.char-status.status-hostile { background: rgba(239, 68, 68, 0.18); color: #f87171; }
+.char-status.status-allied { background: rgba(59, 130, 246, 0.18); color: #60a5fa; }
 
 .card-body {
   padding: 1rem;
@@ -269,7 +276,7 @@ const statusClass = (status) => {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.4rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .info-row:last-child {
@@ -278,20 +285,21 @@ const statusClass = (status) => {
 
 .info-label {
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: #8b949e;
   flex-shrink: 0;
   min-width: 4em;
 }
 
 .info-value {
   font-size: 0.9rem;
-  color: var(--text-color);
+  color: #d0d0d0;
   text-align: right;
   line-height: 1.4;
 }
 
 .info-value.relationship {
   font-weight: 600;
+  color: #f0c040;
 }
 
 /* 好感度条 */
@@ -306,7 +314,7 @@ const statusClass = (status) => {
 .favorability-bar {
   flex: 1;
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -339,7 +347,7 @@ const statusClass = (status) => {
 .last-interaction .info-value {
   max-width: 280px;
   font-size: 0.82rem;
-  color: var(--text-muted);
+  color: #8b949e;
 }
 
 .loading {
@@ -348,6 +356,7 @@ const statusClass = (status) => {
   align-items: center;
   padding: 4rem;
   gap: 1rem;
+  color: #8b949e;
 }
 
 .spinner {
@@ -361,6 +370,19 @@ const statusClass = (status) => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* 深色主题按钮覆盖 */
+.character-relations-container :deep(.btn) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e0e0e0;
+}
+
+.character-relations-container :deep(.btn:hover) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
 }
 
 @media (max-width: 768px) {
