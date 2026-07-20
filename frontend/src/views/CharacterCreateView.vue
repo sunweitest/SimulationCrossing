@@ -528,7 +528,7 @@ const startGame = async () => {
 .create-content {
   position: relative;
   z-index: 5;
-  height: calc(100vh - 76px - 52px);
+  height: calc(100vh - 76px - 74px);
   overflow-y: auto;
   display: flex;
   align-items: center;
@@ -707,52 +707,57 @@ textarea.input {
   z-index: 10;
   display: flex;
   justify-content: center;
-  gap: 1rem;
-  padding: 10px 28px;
+  gap: 14px;
+  padding: 12px 28px;
+  flex-wrap: wrap;
 }
 
 .footer-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 7px 18px;
-  border-radius: 20px;
-  font-size: 0.82rem;
-  font-weight: 500;
+  padding: 10px 22px;
+  border-radius: 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-decoration: none;
-  transition: all 0.25s;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  letter-spacing: 0.3px;
 }
 
 .footer-btn-feedback {
-  background: rgba(255,215,150,0.12);
-  border: 1px solid rgba(255,215,150,0.25);
-  color: rgba(255,215,150,0.9);
-}
-
-.footer-btn-feedback:hover {
-  background: rgba(255,215,150,0.22);
-  border-color: rgba(255,215,150,0.45);
+  background: #1a1a2e;
+  border: 2px solid #f0c040;
   color: #f0c040;
 }
 
+.footer-btn-feedback:hover {
+  background: #f0c040;
+  border-color: #f0c040;
+  color: #1a1a2e;
+  box-shadow: 0 4px 16px rgba(240,192,64,0.4);
+  transform: translateY(-1px);
+}
+
 .footer-qq {
-  font-size: 0.75rem;
-  opacity: 0.7;
+  font-size: 0.78rem;
+  font-weight: 400;
+  opacity: 0.8;
 }
 
 .footer-btn-github {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: rgba(255,255,255,0.8);
+  background: #24292e;
+  border: 2px solid #8b949e;
+  color: #f0f6fc;
 }
 
 .footer-btn-github:hover {
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.35);
+  background: #333842;
+  border-color: #c9d1d9;
   color: #fff;
+  box-shadow: 0 4px 16px rgba(139,148,158,0.35);
+  transform: translateY(-1px);
 }
 
 /* ===== 响应式 ===== */
@@ -778,7 +783,7 @@ textarea.input {
   }
 
   .create-content {
-    height: calc(100vh - 100px - 52px);
+    height: calc(100vh - 100px - 74px);
     align-items: flex-start;
     padding: 12px;
   }
