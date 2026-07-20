@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     DEEPSEEK_MAX_HISTORY_TURNS: int = 5      # 保留的最近对话轮数（减少上下文减少出错）
 
     # 上下文压缩配置
-    CONTEXT_COMPRESSION_THRESHOLD: int = 6   # 触发压缩的对话轮数阈值（超过此值开始压缩旧轮）
-    CONTEXT_RECENT_TURNS: int = 3            # 压缩后保留的最近完整轮数
+    CONTEXT_COMPRESSION_THRESHOLD: int = 1   # 触发压缩的对话轮数阈值（超过此值开始压缩旧轮，设1=第2轮起压缩）
+    CONTEXT_RECENT_TURNS: int = 1            # 压缩后保留的最近完整轮数
 
     # 角色追踪配置
     CHARACTER_EXTRACTION_MODEL: str = "deepseek-v4-flash"  # 角色提取使用的模型
