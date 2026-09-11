@@ -166,6 +166,7 @@ import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
 import xiyouImage from '../../../images/xiyou.png'
+import jinpingmeiImage from '../../../images/jinpingmei.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -197,7 +198,8 @@ const worldImageMap = {
   '水浒传': { src: shuihuImage },
   '明代': { src: mingdaiImage },
   '清代': { src: hongloumengImage },
-  '西游记': { src: xiyouImage }
+  '西游记': { src: xiyouImage },
+  '金瓶梅': { src: jinpingmeiImage }
 }
 const currentWorldImage = computed(() => worldImageMap[gameStore.currentSession?.novel])
 
@@ -282,7 +284,11 @@ const performAction = async (action) => {
         displayedScene.value += delta
       },
       onScene: (scenePayload) => {
-        displayedScene.value = scenePayload.scene_description
+        // 流式文本已通过 onStoryChunk 逐字累积，这里只补图片和状态；
+        // 仅在没有任何流式文本时回退为完整 scene_description，避免打字机结束后整段刷新
+        if (!displayedScene.value) {
+          displayedScene.value = scenePayload.scene_description
+        }
         currentSceneImage.value = scenePayload.scene_image || null
         isAwaitingOptions.value = false
       }

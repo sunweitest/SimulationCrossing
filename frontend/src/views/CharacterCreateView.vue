@@ -217,6 +217,7 @@ import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
 import xiyouImage from '../../../images/xiyou.png'
+import jinpingmeiImage from '../../../images/jinpingmei.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -251,7 +252,8 @@ const FALLBACK_NOVELS = {
   '水浒传': ['洪太尉访道', '梁山聚义', '攻打祝家庄', '招安之路', '征讨方腊', '卸甲还乡'],
   '明代': ['洪武之治', '靖难之役', '永乐盛世', '土木堡之变', '万历乱局', '女真崛起', '闯王进京'],
   '清代': ['八旗入关', '康熙继位', '九子夺嫡', '马戛尔尼访华', '虎门销烟', '金田起义', '第二次中英战争', '洋务运动', '甲午战争', '八国联军进京', '预备立宪'],
-  '西游记': ['大闹天宫', '五行山下', '西天取经', '三打白骨精', '女儿国', '真假美猴王', '火焰山', '取得真经']
+  '西游记': ['大闹天宫', '五行山下', '西天取经', '三打白骨精', '女儿国', '真假美猴王', '火焰山', '取得真经'],
+  '金瓶梅': ['结拜发迹', '王婆说风情', '毒杀武大', '娶李瓶儿', '生子鼎盛', '妻妾争宠', '暴毙家败', '妻妾散场']
 }
 
 // 从API加载的角色详情缓存
@@ -277,6 +279,10 @@ const worldImageMap = {
   '西游记': {
     src: xiyouImage,
     caption: '西行路上，妖雾重重'
+  },
+  '金瓶梅': {
+    src: jinpingmeiImage,
+    caption: '清河县里，浮世众生'
   }
 }
 
