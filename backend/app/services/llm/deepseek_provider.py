@@ -143,11 +143,14 @@ class DeepSeekProvider(LLMProvider):
             base_url="https://api.deepseek.com",
             timeout=90.0,
         )
-        self._qwen_client = AsyncOpenAI(
-            api_key=settings.DASHSCOPE_API_KEY,
-            base_url=settings.QWEN_BASE_URL,
-            timeout=90.0,
-        )
+        # Qwen 客户端用于生成行动选项/积分/成就（依赖 DASHSCOPE_API_KEY）
+        self._qwen_client = None
+        if settings.DASHSCOPE_API_KEY:
+            self._qwen_client = AsyncOpenAI(
+                api_key=settings.DASHSCOPE_API_KEY,
+                base_url=settings.QWEN_BASE_URL,
+                timeout=90.0,
+            )
         self._temperature = settings.DEEPSEEK_TEMPERATURE
         self._max_tokens = settings.DEEPSEEK_MAX_TOKENS
 
@@ -486,35 +489,44 @@ class DeepSeekProvider(LLMProvider):
 
 请生成行动选项、积分和成就。"""
 
-        try:
-            response = await self._qwen_client.chat.completions.create(
-                model=settings.QWEN_METADATA_MODEL,
-                messages=[
-                    {"role": "system", "content": METADATA_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                stream=False,
-                temperature=0.5,
-                max_tokens=512,
-            )
-            text = (response.choices[0].message.content or "").strip()
-            text = self._clean_response(text)
-            result = self._parse_metadata(text)
-            if result:
-                logger.info(
-                    "METADATA_GEN_OK: choices=%d points=%s achievement=%s",
-                    len(result["choices"]),
-                    result["game_update"].get("points_awarded"),
-                    result["game_update"].get("new_achievement"),
+        # 优先用 Qwen 生成；未配置 DASHSCOPE_API_KEY 时回退到 DeepSeek
+        candidate_clients = []
+        if self._qwen_client is not None:
+            candidate_clients.append((self._qwen_client, settings.QWEN_METADATA_MODEL))
+        candidate_clients.append((self._async_client, "deepseek-v4-flash"))
+
+        for client, model in candidate_clients:
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": METADATA_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                    stream=False,
+                    temperature=0.5,
+                    max_tokens=512,
                 )
-                return result
-            raise ValueError("metadata response is not valid JSON")
-        except Exception as e:
-            logger.warning("METADATA_GEN_FAIL: %s", e)
-            return {
-                "choices": ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"],
-                "game_update": {"points_awarded": 5, "new_achievement": ""},
-            }
+                text = (response.choices[0].message.content or "").strip()
+                text = self._clean_response(text)
+                result = self._parse_metadata(text)
+                if result:
+                    logger.info(
+                        "METADATA_GEN_OK: model=%s choices=%d points=%s achievement=%s",
+                        model,
+                        len(result["choices"]),
+                        result["game_update"].get("points_awarded"),
+                        result["game_update"].get("new_achievement"),
+                    )
+                    return result
+                raise ValueError("metadata response is not valid JSON")
+            except Exception as e:
+                logger.warning("METADATA_GEN_FAIL(model=%s): %s", model, e)
+
+        return {
+            "choices": ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"],
+            "game_update": {"points_awarded": 5, "new_achievement": ""},
+        }
 
     def _assemble_messages(
         self,
