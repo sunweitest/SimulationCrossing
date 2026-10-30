@@ -128,6 +128,7 @@ import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
 import xiyouImage from '../../../images/xiyou.png'
 import jinpingmeiImage from '../../../images/jinpingmei.png'
+import wastelandImage from '../../../images/wasteland.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
@@ -140,7 +141,8 @@ const worldImageMap = {
   '明代': mingdaiImage,
   '清代': hongloumengImage,
   '西游记': xiyouImage,
-  '金瓶梅': jinpingmeiImage
+  '金瓶梅': jinpingmeiImage,
+  '废土末世': wastelandImage
 }
 
 const getWorldImage = (novel) => worldImageMap[novel] || sanguoImage
