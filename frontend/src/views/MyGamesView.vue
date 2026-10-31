@@ -122,30 +122,24 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
-import sanguoImage from '../../../images/sanguo.png'
-import shuihuImage from '../../../images/shuihu.png'
-import mingdaiImage from '../../../images/mingdai.png'
-import hongloumengImage from '../../../images/hongloumeng.png'
-import xiyouImage from '../../../images/xiyou.png'
-import jinpingmeiImage from '../../../images/jinpingmei.png'
-import wastelandImage from '../../../images/wasteland.png'
 
 const router = useRouter()
 const gameStore = useGameStore()
 
 const error = ref('')
 
+// 存档卡横编统一用 400×225 webp 缩略图（public/images/covers，不打包进 bundle）
 const worldImageMap = {
-  '三国演义': sanguoImage,
-  '水浒传': shuihuImage,
-  '明代': mingdaiImage,
-  '清代': hongloumengImage,
-  '西游记': xiyouImage,
-  '金瓶梅': jinpingmeiImage,
-  '废土末世': wastelandImage
+  '三国演义': '/images/covers/sanguo.webp',
+  '水浒传': '/images/covers/shuihu.webp',
+  '明代': '/images/covers/mingdai.webp',
+  '清代': '/images/covers/qingdai.webp',
+  '西游记': '/images/covers/xiyou.webp',
+  '金瓶梅': '/images/covers/jinpingmei.webp',
+  '废土末世': '/images/covers/wasteland.webp'
 }
 
-const getWorldImage = (novel) => worldImageMap[novel] || sanguoImage
+const getWorldImage = (novel) => worldImageMap[novel] || worldImageMap['三国演义']
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''

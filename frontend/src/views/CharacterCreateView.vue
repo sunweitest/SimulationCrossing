@@ -1,7 +1,11 @@
 <template>
   <div class="create-immersive">
     <!-- 全屏背景 -->
-    <div class="create-bg" :style="{ backgroundImage: `url(${displayWorldImage.src})` }"></div>
+    <div
+      class="create-bg"
+      :class="{ 'bg-thumb': step === 'world' }"
+      :style="{ backgroundImage: `url(${displayWorldImage.src})` }"
+    ></div>
 
     <!-- 登录/注册弹窗 -->
     <AuthModal v-model:visible="showAuthModal" :initial-tab="authModalTab" />
@@ -46,7 +50,7 @@
             @keydown.enter.prevent="selectWorld(w.novel)"
             @keydown.space.prevent="selectWorld(w.novel)"
           >
-            <div class="world-cover" :style="{ backgroundImage: `url(${w.src})` }">
+            <div class="world-cover" :style="{ backgroundImage: `url(${w.cover})` }">
               <span v-if="w.badge" class="world-badge">{{ w.badge }}</span>
             </div>
             <div class="world-info">
@@ -64,7 +68,7 @@
         <div class="glass-card">
           <!-- 当前世界 -->
           <div class="selected-world">
-            <div class="selected-world-cover" :style="{ backgroundImage: `url(${currentWorldImage.src})` }"></div>
+            <div class="selected-world-cover" :style="{ backgroundImage: `url(${currentWorldImage.thumb})` }"></div>
             <div class="selected-world-meta">
               <span class="selected-world-name">{{ form.novel }}</span>
               <span class="selected-world-caption">{{ currentWorldImage.caption }}</span>
@@ -305,30 +309,37 @@ const presetCharacterCache = ref({})
 const worldImageMap = {
   '三国演义': {
     src: sanguoImage,
+    thumb: '/images/covers/sanguo.webp',
     caption: '赤壁风起，天下三分'
   },
   '水浒传': {
     src: shuihuImage,
+    thumb: '/images/covers/shuihu.webp',
     caption: '梁山泊上，聚义听潮'
   },
   '明代': {
     src: mingdaiImage,
+    thumb: '/images/covers/mingdai.webp',
     caption: '宫阙深处，风云暗涌'
   },
   '清代': {
     src: hongloumengImage,
+    thumb: '/images/covers/qingdai.webp',
     caption: '盛世帘影，旧梦将醒'
   },
   '西游记': {
     src: xiyouImage,
+    thumb: '/images/covers/xiyou.webp',
     caption: '西行路上，妖雾重重'
   },
   '金瓶梅': {
     src: jinpingmeiImage,
+    thumb: '/images/covers/jinpingmei.webp',
     caption: '清河县里，浮世众生'
   },
   '废土末世': {
     src: wastelandImage,
+    thumb: '/images/covers/wasteland.webp',
     caption: '废土荒原，文明余烬'
   }
 }
@@ -348,10 +359,11 @@ const presetCharacters = computed(() => {
 })
 
 const currentWorldImage = computed(() => worldImageMap[form.value.novel] || worldImageMap['三国演义'])
-// 选世界阶段：鼠标悬停/聚焦的卡片背景实时预览
+// 选世界阶段：背景用 400×225 缩略图（首屏只需 ~160KB，不拉 5MB 原图）；选完世界后再用大图
 const displayWorldImage = computed(() => {
-  if (step.value === 'world' && hoverNovel.value) {
-    return worldImageMap[hoverNovel.value] || currentWorldImage.value
+  if (step.value === 'world') {
+    const meta = worldImageMap[hoverNovel.value] || currentWorldImage.value
+    return { src: meta.thumb }
   }
   return currentWorldImage.value
 })
@@ -365,7 +377,7 @@ const worldCards = computed(() => {
     const meta = worldImageMap[novel]
     return {
       novel,
-      src: meta?.src || worldImageMap['三国演义'].src,
+      cover: meta?.thumb || worldImageMap['三国演义'].thumb,
       caption: meta?.caption || '未知世界，静待探索',
       badge: idx === 0 ? '推荐' : ''
     }
@@ -570,6 +582,14 @@ const startGame = async () => {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
+}
+
+/* 选世界阶段背景用 400×225 缩略图：轻微放大 + 模糊，避免糊得明显 */
+.create-bg.bg-thumb {
+  background-size: cover;
+  transform: scale(1.06);
+  filter: blur(3px) saturate(1.05);
+  transition: background-image 0.35s ease;
 }
 
 /* ===== 顶部栏 ===== */
