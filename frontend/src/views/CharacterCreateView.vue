@@ -1,7 +1,7 @@
 <template>
   <div class="create-immersive">
     <!-- 全屏背景 -->
-    <div class="create-bg" :style="{ backgroundImage: `url(${currentWorldImage.src})` }"></div>
+    <div class="create-bg" :style="{ backgroundImage: `url(${displayWorldImage.src})` }"></div>
 
     <!-- 登录/注册弹窗 -->
     <AuthModal v-model:visible="showAuthModal" :initial-tab="authModalTab" />
@@ -23,18 +23,56 @@
     </div>
 
     <!-- 中央内容区 -->
-    <div class="create-content">
-      <div class="card-grid">
+    <div class="create-content" :class="{ 'is-world-step': step === 'world' }">
+      <!-- ===== 第一步：选择世界（卡片网格） ===== -->
+      <div v-if="step === 'world'" class="world-step">
+        <div class="world-step-head">
+          <h2>选择你的穿越世界</h2>
+          <p>共 {{ worldCards.length }} 个世界 · 点击「开始穿越」进入角色选择</p>
+        </div>
+
+        <div class="world-grid">
+          <div
+            v-for="w in worldCards"
+            :key="w.novel"
+            class="world-card"
+            :class="{ active: hoverNovel === w.novel }"
+            role="button"
+            tabindex="0"
+            @mouseenter="hoverNovel = w.novel"
+            @mouseleave="hoverNovel = ''"
+            @focus="hoverNovel = w.novel"
+            @blur="hoverNovel = ''"
+            @keydown.enter.prevent="selectWorld(w.novel)"
+            @keydown.space.prevent="selectWorld(w.novel)"
+          >
+            <div class="world-cover" :style="{ backgroundImage: `url(${w.src})` }">
+              <span v-if="w.badge" class="world-badge">{{ w.badge }}</span>
+            </div>
+            <div class="world-info">
+              <h3>{{ w.novel }}</h3>
+              <p class="world-caption">{{ w.caption }}</p>
+              <button class="world-start" @click.stop="selectWorld(w.novel)">开始穿越 →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 第二步：选择角色/剧情 ===== -->
+      <div v-else class="card-grid">
         <!-- 左侧：角色创建表单 -->
         <div class="glass-card">
-          <h2>选择穿越设定</h2>
-
-          <div class="input-group">
-            <label>选择小说/历史背景</label>
-            <select v-model="form.novel" class="input" @change="onNovelChange">
-              <option v-for="n in novelsData" :key="n.novel_id" :value="n.novel_name">{{ n.novel_name }}</option>
-            </select>
+          <!-- 当前世界 -->
+          <div class="selected-world">
+            <div class="selected-world-cover" :style="{ backgroundImage: `url(${currentWorldImage.src})` }"></div>
+            <div class="selected-world-meta">
+              <span class="selected-world-name">{{ form.novel }}</span>
+              <span class="selected-world-caption">{{ currentWorldImage.caption }}</span>
+            </div>
+            <button class="change-world" @click="backToWorlds">↺ 换世界</button>
           </div>
+
+          <h2>选择角色与剧情</h2>
 
           <div class="input-group">
             <label>选择时间节点</label>
@@ -207,7 +245,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { gameAPI } from '@/api'
@@ -221,12 +259,15 @@ import jinpingmeiImage from '../../../images/jinpingmei.png'
 import wastelandImage from '../../../images/wasteland.png'
 
 const router = useRouter()
+const route = useRoute()
 const gameStore = useGameStore()
 const authStore = useAuthStore()
 
 const showAuthModal = ref(false)
 const authModalTab = ref('login')
 
+const step = ref('world') // 'world' 选世界 | 'character' 选角色/剧情
+const hoverNovel = ref('')
 const characterType = ref('preset')
 const selectedPresetCharacter = ref('')
 const loading = ref(false)
@@ -307,6 +348,29 @@ const presetCharacters = computed(() => {
 })
 
 const currentWorldImage = computed(() => worldImageMap[form.value.novel] || worldImageMap['三国演义'])
+// 选世界阶段：鼠标悬停/聚焦的卡片背景实时预览
+const displayWorldImage = computed(() => {
+  if (step.value === 'world' && hoverNovel.value) {
+    return worldImageMap[hoverNovel.value] || currentWorldImage.value
+  }
+  return currentWorldImage.value
+})
+
+// 世界卡片数据（优先用接口返回的小说列表，接口挂了用硬编码兜底）
+const worldCards = computed(() => {
+  const names = novelsData.value.length > 0
+    ? novelsData.value.map(n => n.novel_name)
+    : Object.keys(FALLBACK_NOVELS)
+  return names.map((novel, idx) => {
+    const meta = worldImageMap[novel]
+    return {
+      novel,
+      src: meta?.src || worldImageMap['三国演义'].src,
+      caption: meta?.caption || '未知世界，静待探索',
+      badge: idx === 0 ? '推荐' : ''
+    }
+  })
+})
 const selectedPresetInfo = computed(() => {
   const cacheKey = `${form.value.novel}/${selectedPresetCharacter.value}`
   const presetInfo = presetCharacterCache.value[cacheKey]
@@ -323,14 +387,28 @@ const previewCharacter = computed(() => {
   return null
 })
 
-const onNovelChange = () => {
+const resetForNovel = () => {
   form.value.timeline = timelines.value[0] || ''
   selectedPresetCharacter.value = ''
-  if (characterType.value === 'preset') {
-    form.value.name = ''
-    form.value.starting_points = 0
+  form.value.name = ''
+  form.value.starting_points = 0
+  availableCharacters.value = {}
+}
+
+// 点击卡片「开始穿越」→ 锁定世界并进入角色选择
+const selectWorld = (novel) => {
+  if (form.value.novel !== novel) {
+    form.value.novel = novel
+    resetForNovel()
+    loadCharacters()
   }
-  loadCharacters()
+  hoverNovel.value = ''
+  step.value = 'character'
+}
+
+const backToWorlds = () => {
+  step.value = 'world'
+  hoverNovel.value = ''
 }
 
 // 从API加载角色-时间节点映射
@@ -354,7 +432,23 @@ onMounted(async () => {
   } catch (err) {
     console.warn('加载小说列表失败，使用硬编码兜底:', err)
   }
-  await loadCharacters()
+  // 支持 /character-create?novel=废土末世 直达角色页（分享/回跳场景）
+  const queryNovel = typeof route.query.novel === 'string' ? route.query.novel : ''
+  if (queryNovel) {
+    const known = novelsData.value.length > 0
+      ? novelsData.value.some(n => n.novel_name === queryNovel)
+      : Boolean(FALLBACK_NOVELS[queryNovel])
+    if (known) {
+      if (form.value.novel !== queryNovel) {
+        form.value.novel = queryNovel
+        resetForNovel()
+      }
+      step.value = 'character'
+    }
+  }
+
+  // 选世界阶段暂不预加载角色，进入角色页时再拉
+  if (step.value === 'character') await loadCharacters()
 })
 
 const onPresetCharacterChange = async () => {
@@ -546,6 +640,204 @@ const startGame = async () => {
   align-items: center;
   justify-content: center;
   padding: 20px;
+}
+
+.create-content.is-world-step {
+  align-items: flex-start;
+  padding: 8px 20px 24px;
+}
+
+/* ===== 第一步：世界卡片网格 ===== */
+.world-step {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+.world-step-head {
+  text-align: center;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.world-step-head h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.5rem;
+  color: #f0e6d3;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.75);
+}
+
+.world-step-head p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.65);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+/* 自动适配列数：宽度够就多列，窄屏自动降为 1 列 */
+.world-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.world-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 10, 25, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 215, 150, 0.16);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.world-card:hover,
+.world-card.active,
+.world-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: rgba(255, 215, 150, 0.55);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 215, 150, 0.25) inset;
+}
+
+.world-cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background-size: cover;
+  background-position: center;
+  background-color: #1a1a2e;
+  transition: transform 0.35s ease;
+}
+
+.world-card:hover .world-cover,
+.world-card.active .world-cover {
+  transform: scale(1.04);
+}
+
+.world-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 40%, rgba(10, 10, 25, 0.85) 100%);
+}
+
+.world-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  color: #1a1a2e;
+  background: #f0c040;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.world-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem 1rem;
+}
+
+.world-info h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #f0e6d3;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.world-caption {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 215, 150, 0.72);
+  min-height: 1.2em;
+}
+
+.world-start {
+  margin-top: 0.55rem;
+  width: 100%;
+  padding: 0.55rem;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 215, 150, 0.45);
+  background: rgba(240, 192, 64, 0.12);
+  color: #f0c040;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.world-card:hover .world-start,
+.world-start:hover {
+  background: #f0c040;
+  border-color: #f0c040;
+  color: #1a1a2e;
+}
+
+/* ===== 已选世界信息条 ===== */
+.selected-world {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.9rem;
+  border-radius: 10px;
+  background: rgba(255, 215, 150, 0.08);
+  border: 1px solid rgba(255, 215, 150, 0.18);
+}
+
+.selected-world-cover {
+  width: 56px;
+  height: 34px;
+  flex: none;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
+}
+
+.selected-world-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.selected-world-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f0e6d3;
+}
+
+.selected-world-caption {
+  font-size: 0.72rem;
+  color: rgba(255, 215, 150, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-world {
+  margin-left: auto;
+  flex: none;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 215, 150, 0.35);
+  background: transparent;
+  color: rgba(255, 215, 150, 0.9);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.change-world:hover {
+  background: rgba(255, 215, 150, 0.18);
+  color: #f0c040;
 }
 
 .card-grid {
@@ -779,7 +1071,6 @@ textarea.input {
     flex-wrap: wrap;
     gap: 0.5rem;
   }
-
   .top-title {
     font-size: 1.1rem;
   }
@@ -798,6 +1089,32 @@ textarea.input {
     height: calc(100vh - 100px - 74px);
     align-items: flex-start;
     padding: 12px;
+  }
+
+  .create-content.is-world-step {
+    padding: 4px 12px 20px;
+  }
+
+  .world-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+
+  .world-step-head h2 {
+    font-size: 1.2rem;
+  }
+
+  .world-info {
+    padding: 0.65rem 0.75rem 0.8rem;
+  }
+
+  .world-info h3 {
+    font-size: 0.98rem;
+  }
+
+  .world-start {
+    padding: 0.45rem;
+    font-size: 0.82rem;
   }
 
   .card-grid {
