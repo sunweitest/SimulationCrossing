@@ -608,9 +608,10 @@ class DeepSeekProvider(LLMProvider):
 
 请生成行动选项、积分和成就。"""
 
-        # 优先用 Qwen 生成；未配置 DASHSCOPE_API_KEY 时回退到 DeepSeek
+        # 选项/积分/成就默认走 DeepSeek；仅在显式开启 USE_QWEN_METADATA 且配了
+        # DASHSCOPE_API_KEY 时才优先用 Qwen，失败自动回落 DeepSeek
         candidate_clients = []
-        if self._qwen_client is not None:
+        if settings.USE_QWEN_METADATA and self._qwen_client is not None:
             candidate_clients.append((self._qwen_client, settings.QWEN_METADATA_MODEL))
         candidate_clients.append((self._async_client, settings.DEEPSEEK_MODEL))
 

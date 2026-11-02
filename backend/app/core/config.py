@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # 接口地址与模型名都可通过 .env 覆盖，换网关/换模型不用改代码
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"      # 主模型：剧情生成、流式输出、工具循环、行动选项
-    DEEPSEEK_PRO_MODEL: str = "deepseek-v4-pro"    # 强模型：上下文压缩等要求更高的任务
+    DEEPSEEK_PRO_MODEL: str = "deepseek-v4-flash"  # 上下文压缩等任务，默认与主模型一致
 
     # DeepSeek 模型参数
     DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意
@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     QWEN_BASE_URL: str = "https://llm-t2prhzae03osgg8c.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
     QWEN_MODEL: str = "qwen-plus"
     QWEN_METADATA_MODEL: str = "qwen-plus"
+    # 行动选项/积分/成就 是否优先用 Qwen 生成；false（默认）= 统一走 DeepSeek
+    USE_QWEN_METADATA: bool = False
 
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
