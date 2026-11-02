@@ -85,25 +85,33 @@ async def call_summarization(prompt: str) -> Optional[str]:
             base_url=settings.DEEPSEEK_BASE_URL,
         )
 
-        response = client.chat.completions.create(
-            model=settings.DEEPSEEK_PRO_MODEL,
-            messages=[
-                {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-            max_tokens=1024,
-            stream=False,
-        )
+        messages = [
+            {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
+        summary = ""
+        for attempt in (1, 2):
+            # 第 2 次关掉思考：推理模型可能把 max_tokens 全花在 reasoning 上，
+            # content 返回空串（SUMMARIZE_EMPTY），压缩就白跑了。
+            extra = {"extra_body": {"thinking": {"type": "disabled"}}} if attempt == 2 else {}
+            response = client.chat.completions.create(
+                model=settings.DEEPSEEK_PRO_MODEL,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=1024,
+                stream=False,
+                **extra,
+            )
+            summary = (response.choices[0].message.content or "").strip()
+            if summary:
+                break
+            logger.warning("SUMMARIZE_EMPTY: attempt=%d 空响应", attempt)
 
-        summary = response.choices[0].message.content
         if summary:
-            summary = summary.strip()
             logger.info("SUMMARIZE_OK: chars=%d", len(summary))
             return summary
-        else:
-            logger.warning("SUMMARIZE_EMPTY: response content was empty")
-            return None
+        logger.warning("SUMMARIZE_EMPTY: 重试后仍为空，跳过压缩")
+        return None
 
     except Exception as e:
         logger.exception("SUMMARIZE_ERROR: %s", e)
