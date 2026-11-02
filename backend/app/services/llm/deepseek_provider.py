@@ -245,12 +245,12 @@ class DeepSeekProvider(LLMProvider):
     def __init__(self):
         self._client = OpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
+            base_url=settings.DEEPSEEK_BASE_URL,
             timeout=90.0,  # 单次请求超时 90s
         )
         self._async_client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
+            base_url=settings.DEEPSEEK_BASE_URL,
             timeout=90.0,
         )
         # Qwen 客户端用于生成行动选项/积分/成就（依赖 DASHSCOPE_API_KEY）
@@ -341,7 +341,7 @@ class DeepSeekProvider(LLMProvider):
         try:
             for round_idx in range(max_tool_rounds + 1):
                 response = self._client.chat.completions.create(
-                    model="deepseek-v4-flash",
+                    model=settings.DEEPSEEK_MODEL,
                     messages=messages,
                     stream=False,
                     temperature=self._temperature,
@@ -487,7 +487,7 @@ class DeepSeekProvider(LLMProvider):
                     tool_messages = list(messages)  # 拷贝，避免污染外层
                     for _round_idx in range(max_tool_rounds + 1):
                         response = self._client.chat.completions.create(
-                            model="deepseek-v4-flash",
+                            model=settings.DEEPSEEK_MODEL,
                             messages=tool_messages,
                             stream=False,
                             temperature=self._temperature,
@@ -550,7 +550,7 @@ class DeepSeekProvider(LLMProvider):
                     logger.warning("STREAM_TOOL_LOOP_EXHAUSTED: max_rounds=%d", max_tool_rounds)
                     # 兜底：超限后用没有 tools 的参数再请求一次
                     fallback_resp = self._client.chat.completions.create(
-                        model="deepseek-v4-flash",
+                        model=settings.DEEPSEEK_MODEL,
                         messages=tool_messages,
                         stream=False,
                         temperature=self._temperature,
@@ -565,7 +565,7 @@ class DeepSeekProvider(LLMProvider):
 
                 # ── 无 tools：直接流式调用 ──
                 stream = await self._async_client.chat.completions.create(
-                    model="deepseek-v4-flash",
+                    model=settings.DEEPSEEK_MODEL,
                     messages=messages,
                     stream=True,
                     temperature=self._temperature,
@@ -580,9 +580,10 @@ class DeepSeekProvider(LLMProvider):
                 text = "".join(full_text)
                 self._save_raw_log(text, new_session_id)
                 logger.info(
-                    "STORY_STREAM_OK: chars=%d time=%.1fs model=deepseek-v4-flash",
+                    "STORY_STREAM_OK: chars=%d time=%.1fs model=%s",
                     len(text),
                     time.time() - t_start,
+                    settings.DEEPSEEK_MODEL,
                 )
             except Exception as e:
                 logger.exception("STORY_STREAM_ERR: time=%.1fs error=%s", time.time() - t_start, e)
@@ -611,7 +612,7 @@ class DeepSeekProvider(LLMProvider):
         candidate_clients = []
         if self._qwen_client is not None:
             candidate_clients.append((self._qwen_client, settings.QWEN_METADATA_MODEL))
-        candidate_clients.append((self._async_client, "deepseek-v4-flash"))
+        candidate_clients.append((self._async_client, settings.DEEPSEEK_MODEL))
 
         for client, model in candidate_clients:
             try:
@@ -840,7 +841,7 @@ class DeepSeekProvider(LLMProvider):
 
         try:
             response = self._client.chat.completions.create(
-                model="deepseek-v4-flash",
+                model=settings.DEEPSEEK_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 stream=False,
                 temperature=0.7,

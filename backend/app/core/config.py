@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     # DeepSeek API配置（仅 LLM_PROVIDER=deepseek 时需要）
     DEEPSEEK_API_KEY: str = ""
+    # 接口地址与模型名都可通过 .env 覆盖，换网关/换模型不用改代码
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"      # 主模型：剧情生成、流式输出、工具循环、行动选项
+    DEEPSEEK_PRO_MODEL: str = "deepseek-v4-pro"    # 强模型：上下文压缩等要求更高的任务
 
     # DeepSeek 模型参数
     DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意

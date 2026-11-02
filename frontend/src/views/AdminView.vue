@@ -40,6 +40,56 @@
       <!-- Tab 1: 用户管理 -->
       <div v-if="activeTab === 'users'" class="tab-content">
         <div class="card">
+          <div class="section-header">
+            <h3>用户列表 <span class="text-muted" style="font-size:0.85rem;font-weight:normal">共 {{ userTotal }} 人</span></h3>
+            <button class="btn btn-sm btn-secondary" @click="loadUsers(userPage)" :disabled="userListLoading">
+              {{ userListLoading ? '加载中...' : '刷新' }}
+            </button>
+          </div>
+          <div class="lookup-row">
+            <input v-model="userListQuery" type="text" class="input" placeholder="按邮箱/手机号过滤，留空显示全部" @keyup.enter="loadUsers(1)" />
+            <button class="btn btn-primary" @click="loadUsers(1)" :disabled="userListLoading">搜索</button>
+          </div>
+
+          <div v-if="!userListLoading && userList.length === 0" class="text-muted" style="padding:1rem 0">暂无用户</div>
+
+          <div v-if="userList.length > 0" class="user-table">
+            <div class="user-row user-row-head">
+              <span>ID</span>
+              <span>账号</span>
+              <span>注册时间</span>
+              <span>会话</span>
+              <span>额外次数</span>
+              <span>包月</span>
+              <span></span>
+            </div>
+            <div
+              v-for="u in userList"
+              :key="u.id"
+              :class="['user-row', { active: user && user.id === u.id }]"
+              @click="selectUserFromList(u)"
+            >
+              <span>#{{ u.id }}</span>
+              <span class="user-account">{{ u.email || u.phone || '—' }}</span>
+              <span class="text-muted">{{ formatDate(u.created_at) }}</span>
+              <span>{{ u.session_count }}</span>
+              <span>{{ u.extra_quota }}</span>
+              <span>
+                <span v-if="u.is_unlimited" class="badge badge-success">剩 {{ u.unlimited_days_left }} 天</span>
+                <span v-else class="text-muted">—</span>
+              </span>
+              <span><button class="btn btn-sm btn-secondary" @click.stop="selectUserFromList(u)">管理</button></span>
+            </div>
+          </div>
+
+          <div v-if="userTotal > userPageSize" class="pager">
+            <button class="btn btn-sm btn-secondary" :disabled="userPage <= 1 || userListLoading" @click="loadUsers(userPage - 1)">上一页</button>
+            <span class="text-muted">第 {{ userPage }} / {{ Math.ceil(userTotal / userPageSize) }} 页</span>
+            <button class="btn btn-sm btn-secondary" :disabled="userPage * userPageSize >= userTotal || userListLoading" @click="loadUsers(userPage + 1)">下一页</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h3>查找用户</h3>
           <div class="lookup-row">
             <input v-model="searchQuery" type="text" class="input" placeholder="输入邮箱或手机号" @keyup.enter="lookupUser" />
@@ -288,6 +338,7 @@ const authenticate = async () => {
   try {
     await adminAPI.listNovels(adminKey.value)
     authenticated.value = true
+    loadUsers(1)
   } catch (err) {
     gateError.value = err.response?.data?.detail || err.response?.status === 403 ? '密钥无效' : '验证失败，请检查网络'
   } finally {
@@ -315,6 +366,48 @@ const addingQuota = ref(false)
 const settingUnlimited = ref(false)
 const cancelingUnlimited = ref(false)
 
+// 用户列表
+const userList = ref([])
+const userListLoading = ref(false)
+const userListQuery = ref('')
+const userPage = ref(1)
+const userPageSize = 20
+const userTotal = ref(0)
+
+const loadUsers = async (page = 1) => {
+  userListLoading.value = true
+  try {
+    const params = { page, page_size: userPageSize }
+    if (userListQuery.value.trim()) params.q = userListQuery.value.trim()
+    const data = await adminAPI.listUsers(params, adminKey.value)
+    userList.value = data.items || []
+    userTotal.value = data.total || 0
+    userPage.value = data.page || page
+  } catch (err) {
+    showMessage(err.response?.data?.detail || '加载用户列表失败', 'error')
+  } finally {
+    userListLoading.value = false
+  }
+}
+
+// 从列表里点某个用户 → 直接进入下方的用户信息/操作区
+const selectUserFromList = (u) => {
+  user.value = u
+  searchQuery.value = u.email || u.phone || ''
+}
+
+// 操作完成后刷新详情 + 列表（列表里点开的用户没有 searchQuery 也能刷）
+const refreshUser = async () => {
+  if (!user.value) return
+  const q = user.value.email || user.value.phone
+  if (q) {
+    searchQuery.value = q
+    await lookupUser()
+  }
+  await loadUsers(userPage.value)
+}
+
+
 const formatDate = (d) => d ? new Date(d).toLocaleString('zh-CN') : ''
 
 const lookupUser = async () => {
@@ -332,21 +425,21 @@ const addQuota = async () => {
   addingQuota.value = true
   try {
     const r = await adminAPI.addQuota(user.value.id, quotaAmount.value, adminKey.value)
-    showMessage(r.message || '追加成功'); quotaAmount.value = null; await lookupUser()
+    showMessage(r.message || '追加成功'); quotaAmount.value = null; await refreshUser()
   } catch (err) { showMessage(err.response?.data?.detail || '操作失败', 'error') }
   finally { addingQuota.value = false }
 }
 
 const setUnlimited = async () => {
   settingUnlimited.value = true
-  try { await adminAPI.setUnlimited(user.value.id, adminKey.value); showMessage('已开通'); await lookupUser() }
+  try { await adminAPI.setUnlimited(user.value.id, adminKey.value); showMessage('已开通'); await refreshUser() }
   catch (err) { showMessage(err.response?.data?.detail || '操作失败', 'error') }
   finally { settingUnlimited.value = false }
 }
 
 const cancelUnlimited = async () => {
   cancelingUnlimited.value = true
-  try { await adminAPI.cancelUnlimited(user.value.id, adminKey.value); showMessage('已取消'); await lookupUser() }
+  try { await adminAPI.cancelUnlimited(user.value.id, adminKey.value); showMessage('已取消'); await refreshUser() }
   catch (err) { showMessage(err.response?.data?.detail || '操作失败', 'error') }
   finally { cancelingUnlimited.value = false }
 }
@@ -917,6 +1010,54 @@ textarea.input { resize: vertical; font-family: inherit; }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.78rem; background: #21262d; color: #8b949e; }
 .badge-success { background: rgba(35,134,54,0.2); color: #3fb950; }
 
+/* ===== 用户列表 ===== */
+.user-table {
+  margin-top: 0.75rem;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: 70px minmax(160px, 1fr) 170px 60px 80px 110px 70px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid #21262d;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.user-row:last-child { border-bottom: none; }
+.user-row:hover { background: #161b22; }
+.user-row.active { background: #1f6feb22; box-shadow: inset 2px 0 0 #58a6ff; }
+
+.user-row-head {
+  background: #161b22;
+  color: #8b949e;
+  font-size: 0.8rem;
+  cursor: default;
+  font-weight: 600;
+}
+.user-row-head:hover { background: #161b22; }
+
+.user-account {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  font-size: 0.85rem;
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
   .top-bar { flex-wrap: wrap; gap: 0.75rem; padding: 12px 16px; }
@@ -926,5 +1067,9 @@ textarea.input { resize: vertical; font-family: inherit; }
   .novel-layout { grid-template-columns: 1fr; }
   .char-form-grid { grid-template-columns: 1fr 1fr; }
   .gate-card { padding: 2rem 1.5rem; }
+  /* 窄屏：去掉注册时间列与包月列，保留可用的核心信息 */
+  .user-row { grid-template-columns: 54px 1fr 50px 70px 64px; }
+  .user-row > span:nth-child(3),
+  .user-row > span:nth-child(6) { display: none; }
 }
 </style>

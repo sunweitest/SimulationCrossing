@@ -54,6 +54,9 @@ export const adminAPI = {
   lookupUser: (q, adminKey) =>
     api.get('/admin/lookup', { params: { q }, headers: { 'X-Admin-Key': adminKey } }),
 
+  listUsers: (params, adminKey) =>
+    api.get('/admin/users', { params, headers: { 'X-Admin-Key': adminKey } }),
+
   addQuota: (userId, amount, adminKey) =>
     api.post('/admin/add-quota', null, { params: { user_id: userId, amount }, headers: { 'X-Admin-Key': adminKey } }),
 

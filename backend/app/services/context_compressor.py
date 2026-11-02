@@ -82,11 +82,11 @@ async def call_summarization(prompt: str) -> Optional[str]:
     try:
         client = OpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
+            base_url=settings.DEEPSEEK_BASE_URL,
         )
 
         response = client.chat.completions.create(
-            model="deepseek-v4-pro",
+            model=settings.DEEPSEEK_PRO_MODEL,
             messages=[
                 {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -182,7 +182,7 @@ async def extract_characters(
     try:
         client = OpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
-            base_url="https://api.deepseek.com",
+            base_url=settings.DEEPSEEK_BASE_URL,
         )
 
         response = client.chat.completions.create(

@@ -105,6 +105,67 @@ async def lookup_user(
     }
 
 
+# ── 用户列表 ──────────────────────────────────────────────
+
+@router.get("/users")
+async def list_users(
+    q: Optional[str] = Query(None, description="按邮箱/手机号模糊搜索"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(_verify_admin),
+):
+    """用户列表（分页 + 关键字过滤），附带额外配额、包月状态与会话数"""
+    cond = None
+    if q and q.strip():
+        kw = f"%{q.strip()}%"
+        cond = (User.email.ilike(kw)) | (User.phone.ilike(kw))
+
+    count_stmt = select(func.count(User.id))
+    if cond is not None:
+        count_stmt = count_stmt.where(cond)
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    list_stmt = select(User).order_by(User.id.desc())
+    if cond is not None:
+        list_stmt = list_stmt.where(cond)
+    list_stmt = list_stmt.offset((page - 1) * page_size).limit(page_size)
+    users = (await db.execute(list_stmt)).scalars().all()
+
+    # 本页用户的会话数，一次分组查询搞定
+    session_counts: dict = {}
+    ids = [u.id for u in users]
+    if ids:
+        rows = await db.execute(
+            select(GameSession.user_id, func.count(GameSession.id))
+            .where(GameSession.user_id.in_(ids))
+            .group_by(GameSession.user_id)
+        )
+        session_counts = {uid: cnt for uid, cnt in rows.all()}
+
+    r = _get_redis()
+    items = []
+    for u in users:
+        try:
+            extra = int(await r.get(_extra_quota_key(u.id)) or 0)
+        except (TypeError, ValueError):
+            extra = 0
+        ttl = await r.ttl(_unlimited_key(u.id))
+        items.append({
+            "id": u.id,
+            "email": u.email,
+            "phone": u.phone,
+            "is_active": u.is_active,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "extra_quota": extra,
+            "is_unlimited": ttl > 0,
+            "unlimited_days_left": max(0, ttl // 86400) if ttl > 0 else 0,
+            "session_count": session_counts.get(u.id, 0),
+        })
+
+    return {"total": total, "page": page, "page_size": page_size, "items": items}
+
+
 # ── 追加次数 ──────────────────────────────────────────────
 
 @router.post("/add-quota")
