@@ -39,6 +39,7 @@ export const authAPI = {
 // 游戏API
 export const gameAPI = {
   createSession: (data) => api.post('/game/session', data),
+  getQuota: () => api.get('/game/quota'),
   performAction: (data) => api.post('/game/action', data),
   getSession: (id) => api.get(`/game/session/${id}`),
   getGameState: (id) => api.get(`/game/session/${id}/state`),

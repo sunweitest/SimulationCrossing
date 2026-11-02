@@ -2,7 +2,11 @@ import asyncio
 import time
 import logging
 import json
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+import redis.asyncio as redis
+from redis.exceptions import RedisError
+from app.core.config import settings
+from app.services.quota import get_quota_status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -56,6 +60,41 @@ async def get_novels(db: AsyncSession = Depends(get_db)):
         )
         for n in novels
     ]
+
+
+@router.get("/quota")
+async def get_my_quota(
+    request: Request,
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """查询当前身份今天还能对话几次（游戏界面右上角展示用）
+
+    未登录：每日 DAILY_FREE_MESSAGES 次，用完提示登录
+    已登录：每日 DAILY_FREE_MESSAGES + DAILY_LOGGED_IN_EXTRA，另有额外配额/包月不限
+    """
+    client = redis.Redis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        db=settings.REDIS_DB,
+        decode_responses=True,
+    )
+    try:
+        return await get_quota_status(client, request, current_user)
+    except RedisError as exc:
+        logger.warning("QUOTA_UNAVAILABLE: %s", exc)
+        # Redis 挂了不影响游戏，前端按“未知”处理
+        return {
+            "is_guest": current_user is None,
+            "daily_limit": None,
+            "used_today": 0,
+            "daily_remaining": None,
+            "extra_quota": 0,
+            "is_unlimited": False,
+            "remaining": None,
+            "unavailable": True,
+        }
+    finally:
+        await client.aclose()
 
 
 @router.post("/session", response_model=GameSessionResponse)

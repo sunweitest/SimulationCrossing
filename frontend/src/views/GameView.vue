@@ -17,6 +17,11 @@
         <span v-if="gameStore.isGenerating" class="top-streaming-dot" :title="streamStatus"></span>
       </div>
       <div class="top-bar-right">
+        <span v-if="quota" :class="['top-stat', 'quota-stat', { 'quota-empty': quota.remaining === 0 }]" :title="quotaTitle">
+          <template v-if="quota.is_unlimited">♾️ 不限次</template>
+          <template v-else-if="quota.remaining === null || quota.remaining === undefined">💬 —</template>
+          <template v-else>💬 剩 {{ quota.remaining }} 次</template>
+        </span>
         <span class="top-stat">⭐ {{ gameStore.currentSession?.points || 0 }}</span>
         <span class="top-stat">🏅 {{ gameStore.currentSession?.achievements?.length || 0 }}</span>
         <button class="top-menu-btn" @click="showSidebar = !showSidebar" title="菜单">
@@ -161,6 +166,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
+import { gameAPI } from '@/api'
 import sanguoImage from '../../../images/sanguo.png'
 import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
@@ -184,6 +190,27 @@ const isAwaitingOptions = ref(false)
 const currentSceneImage = ref(null)
 const streamStatus = ref('AI正在生成剧情...')
 const showSidebar = ref(false)
+
+// 今日剩余对话次数（右上角显示）
+const quota = ref(null)
+const quotaTitle = computed(() => {
+  const q = quota.value
+  if (!q) return ''
+  if (q.is_unlimited) return '包月不限次数'
+  if (q.daily_limit == null) return '次数信息暂不可用'
+  let t = `今日已用 ${q.used_today}/${q.daily_limit}`
+  if (q.extra_quota > 0) t += `，额外配额 ${q.extra_quota} 次`
+  if (q.is_guest) t += '（未登录每日 6 次，登录后 8 次）'
+  return t
+})
+
+const loadQuota = async () => {
+  try {
+    quota.value = await gameAPI.getQuota()
+  } catch (e) {
+    // 次数展示失败不影响游戏本身
+  }
+}
 
 const autoResize = () => {
   const el = actionTextarea.value
@@ -235,6 +262,7 @@ const typewriterEffect = (text) => {
 }
 
 onMounted(async () => {
+  loadQuota()
   const sessionId = route.params.id
 
   if (sessionId) {
@@ -323,6 +351,7 @@ const performAction = async (action) => {
     }
   } finally {
     isAwaitingOptions.value = false
+    loadQuota()
   }
 }
 
@@ -418,6 +447,18 @@ const newGame = () => {
 
 .top-stat {
   font-size: 0.85rem;
+}
+
+/* 今日剩余次数 */
+.quota-stat {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.12);
+  white-space: nowrap;
+}
+.quota-stat.quota-empty {
+  background: rgba(220,80,80,0.28);
+  color: #ffd7d7;
 }
 
 .top-menu-btn {

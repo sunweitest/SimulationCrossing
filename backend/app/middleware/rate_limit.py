@@ -7,7 +7,12 @@ import redis.asyncio as redis
 from redis.exceptions import RedisError
 from app.core.config import settings
 from app.core.security import verify_token
-import hashlib
+from app.services.quota import (
+    user_daily_key,
+    user_extra_key,
+    user_unlimited_key,
+    guest_daily_key,
+)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -27,7 +32,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 decode_responses=True
             )
 
-        is_action = request.url.path == "/api/game/action"
+        # 前端界面走的是流式接口，两条路径都要计数，否则限额形同虚设
+        is_action = request.url.path in ("/api/game/action", "/api/game/action/stream")
         limit_key = None
         use_daily_count = True
         is_unlimited = False
@@ -43,19 +49,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     user_id = payload.get("sub") if payload else None
 
             if user_id:
-                limit_key = f"rate_limit:user:{user_id}:{date.today()}"
+                limit_key = user_daily_key(user_id)
                 daily_limit = settings.DAILY_FREE_MESSAGES + settings.DAILY_LOGGED_IN_EXTRA
 
                 try:
                     # 1. 检查包月不限次数（30 天）
-                    unlimited_key = f"rate_limit:user:{user_id}:unlimited"
+                    unlimited_key = user_unlimited_key(user_id)
                     if await self.redis_client.exists(unlimited_key):
                         is_unlimited = True
                         use_daily_count = False
 
                     # 2. 检查额外配额
                     if not is_unlimited:
-                        extra_key = f"rate_limit:user:{user_id}:extra"
+                        extra_key = user_extra_key(user_id)
                         extra = await self.redis_client.get(extra_key)
                         if extra and int(extra) > 0:
                             # 有额外配额，消耗额外配额，不计入每日次数
@@ -79,11 +85,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 except RedisError as exc:
                     print(f"Redis限流不可用，已放行本次请求: {exc}")
             else:
-                # 未登录用户
-                client_ip = request.client.host
-                user_agent = request.headers.get("user-agent", "")
-                fingerprint = hashlib.md5(f"{client_ip}:{user_agent}".encode()).hexdigest()
-                limit_key = f"rate_limit:guest:{fingerprint}:{date.today()}"
+                # 未登录用户：按 IP + UA 指纹计数（key 规则见 app/services/quota.py）
+                limit_key = guest_daily_key(request)
                 daily_limit = settings.DAILY_FREE_MESSAGES
 
                 try:
@@ -112,7 +115,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     pass  # 包月用户不扣次数
                 elif not use_daily_count:
                     # 使用额外配额的用户：扣减额外配额
-                    extra_key = f"rate_limit:user:{user_id}:extra"
+                    extra_key = user_extra_key(user_id)
                     await self.redis_client.decr(extra_key)
                 else:
                     # 正常每日计数
