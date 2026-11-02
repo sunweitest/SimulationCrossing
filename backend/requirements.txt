@@ -13,3 +13,14 @@ dashscope
 openai>=1.0.0
 redis==5.0.1
 numpy>=1.25.0
+
+# 按需导入但原先漏收录：
+# openpyxl —— app/api/admin.py 的角色 Excel 模板/导入导出
+# email-validator —— pydantic EmailStr，缺失会导致后端启动失败
+openpyxl>=3.1.0
+email-validator>=2.0.0
+
+# 说明：本文件是后端服务**唯一**的依赖清单。
+# 仓库里没有单独的根目录 requirements.txt（已合并到这里）。
+# 根目录的 qwen_python.py 是早期 Streamlit 原型脚本，不参与线上服务，
+# 它额外用到的 streamlit / pandas / plotly 故意不列入，需要时单独安装。

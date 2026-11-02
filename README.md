@@ -241,9 +241,12 @@ npm run build
 # 配置反向代理到后端API
 ```
 
-### 使用Docker Compose
+### 部署方式说明
 
-可以创建docker-compose.yml一键部署完整服务(后端+前端+Redis+Nginx)
+线上环境为**原生部署**：systemd 托管 uvicorn + nginx 反代 + 本机 PostgreSQL / Redis。
+发布脚本在服务器本地维护，不纳入本仓库。
+
+> ⚠️ 仓库里的 `docker-compose.yml` 为**历史遗留、未维护**，与实际运行方式不一致（端口冲突、env_file 指向模板等），请勿用于生产部署，详见该文件头部注释。
 
 ## 未来扩展功能
 

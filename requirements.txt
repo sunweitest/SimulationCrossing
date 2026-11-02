@@ -1,6 +1,0 @@
-openpyxl
-pandas
-plotly
-dashscope
-dotenv
-asyncpg
