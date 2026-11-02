@@ -200,7 +200,7 @@ const quotaTitle = computed(() => {
   if (q.daily_limit == null) return '次数信息暂不可用'
   let t = `今日已用 ${q.used_today}/${q.daily_limit}`
   if (q.extra_quota > 0) t += `，额外配额 ${q.extra_quota} 次`
-  if (q.is_guest) t += '（未登录每日 6 次，登录后 8 次）'
+  if (q.is_guest) t += `（未登录每日 ${q.daily_limit} 次，登录后 ${q.login_limit ?? q.daily_limit} 次）`
   return t
 })
 

@@ -12,6 +12,18 @@ from app.services.llm.base import LLMProvider
 
 logger = logging.getLogger("llm.deepseek")
 
+
+def _thinking_kwargs() -> Dict:
+    """统一关闭推理模型的思考。
+
+    reasoning_content 同样计入 max_tokens，预算被思考占满时 content 会返回空串
+    （表现为 DEEPSEEK_EMPTY + 模板兜底）。关掉后延迟明显下降、输出更稳定。
+    `.env` 里 DEEPSEEK_DISABLE_THINKING=false 可恢复思考。
+    """
+    if settings.DEEPSEEK_DISABLE_THINKING:
+        return {"extra_body": {"thinking": {"type": "disabled"}}}
+    return {}
+
 # ── Tool 定义（DeepSeek function calling）─────────────────
 
 CHARACTER_QUERY_TOOL = {
@@ -348,6 +360,7 @@ class DeepSeekProvider(LLMProvider):
                     temperature=self._temperature,
                     max_tokens=self._max_tokens,
                     tools=tools if use_tools else None,
+                    **_thinking_kwargs(),
                 )
 
                 msg = response.choices[0].message
@@ -515,6 +528,7 @@ class DeepSeekProvider(LLMProvider):
                             temperature=self._temperature,
                             max_tokens=self._max_tokens,
                             tools=tools,
+                            **_thinking_kwargs(),
                         )
                         msg = response.choices[0].message
 
@@ -577,6 +591,7 @@ class DeepSeekProvider(LLMProvider):
                         stream=False,
                         temperature=self._temperature,
                         max_tokens=self._max_tokens,
+                        **_thinking_kwargs(),
                     )
                     text = fallback_resp.choices[0].message.content or ""
                     full_text.append(text)
@@ -592,6 +607,7 @@ class DeepSeekProvider(LLMProvider):
                     stream=True,
                     temperature=self._temperature,
                     max_tokens=self._max_tokens,
+                    **_thinking_kwargs(),
                 )
                 async for chunk in stream:
                     delta = chunk.choices[0].delta.content if chunk.choices else None
@@ -667,6 +683,7 @@ class DeepSeekProvider(LLMProvider):
                     stream=False,
                     temperature=0.5,
                     max_tokens=512,
+                    **_thinking_kwargs(),
                 )
                 text = (response.choices[0].message.content or "").strip()
                 text = self._clean_response(text)
@@ -888,6 +905,7 @@ class DeepSeekProvider(LLMProvider):
                 stream=False,
                 temperature=0.7,
                 max_tokens=256,
+                **_thinking_kwargs(),
             )
             text = (response.choices[0].message.content or "").strip()
             text = re.sub(r"^```(?:json)?\s*", "", text)

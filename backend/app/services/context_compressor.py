@@ -14,6 +14,13 @@ from app.core.config import settings
 
 logger = logging.getLogger("context_compressor")
 
+def _thinking_kwargs() -> dict:
+    """关掉推理模型的思考：reasoning 也吃 max_tokens，偶发导致 content 为空"""
+    if settings.DEEPSEEK_DISABLE_THINKING:
+        return {"extra_body": {"thinking": {"type": "disabled"}}}
+    return {}
+
+
 SUMMARY_SYSTEM_PROMPT = (
     "你是一个专业的故事摘要助手，擅长从长文本中提取关键剧情信息"
     "并生成简洁连贯的概要。只输出概要文本，不要包含任何其他内容。"
@@ -100,7 +107,7 @@ async def call_summarization(prompt: str) -> Optional[str]:
                 temperature=0.3,
                 max_tokens=1024,
                 stream=False,
-                **extra,
+                **{**_thinking_kwargs(), **extra},
             )
             summary = (response.choices[0].message.content or "").strip()
             if summary:
@@ -202,6 +209,7 @@ async def extract_characters(
             temperature=settings.CHARACTER_EXTRACTION_TEMPERATURE,
             max_tokens=4096,
             stream=False,
+            **_thinking_kwargs(),
         )
 
         finish_reason = response.choices[0].finish_reason

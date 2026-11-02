@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     DEEPSEEK_TEMPERATURE: float = 0.8        # 创造性（0-2），越高越有创意
     DEEPSEEK_MAX_TOKENS: int = 2096          # 最大输出 token 数
     DEEPSEEK_MAX_HISTORY_TURNS: int = 5      # 保留的最近对话轮数（减少上下文减少出错）
+    # 关闭推理模型的思考：reasoning 计入 max_tokens，偶发把预算吃光导致 content 为空；
+    # 关掉后延迟明显下降、输出更稳定，代价是复杂剧情的推理略弱
+    DEEPSEEK_DISABLE_THINKING: bool = True
 
     # 上下文压缩配置
     CONTEXT_COMPRESSION_THRESHOLD: int = 1   # 触发压缩的对话轮数阈值（超过此值开始压缩旧轮，设1=第2轮起压缩）
@@ -63,8 +66,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
 
     # 次数限制配置
-    DAILY_FREE_MESSAGES: int = 6
-    DAILY_LOGGED_IN_EXTRA: int = 2
+    DAILY_FREE_MESSAGES: int = 5
+    DAILY_LOGGED_IN_EXTRA: int = 3
 
     # 场景图片匹配
     SCENE_IMAGE_DIR: str = "frontend/public/images/scene"  # 图片目录，相对项目根目录

@@ -4,7 +4,6 @@
 避免两边 key 格式各写一套导致对不上。
 """
 from datetime import date
-import hashlib
 from typing import Optional
 
 from app.core.config import settings
@@ -24,12 +23,25 @@ def user_unlimited_key(user_id) -> str:
     return f"rate_limit:user:{user_id}:unlimited"
 
 
+def client_ip(request) -> str:
+    """取真实客户端 IP。
+
+    nginx 在反代时设置了 X-Real-IP / X-Forwarded-For，直连时才有 request.client。
+    只按 IP 计数是刻意的：一旦把 User-Agent 混进指纹，换浏览器、隐身窗口、
+    甚至 UA 版本变化都会生成新 key，额度就白给了。
+    """
+    real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if real_ip:
+        return real_ip
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    return request.client.host if request.client else "unknown"
+
+
 def guest_daily_key(request) -> str:
-    """未登录用户按 IP + UA 指纹计数"""
-    host = request.client.host if request.client else ""
-    ua = request.headers.get("user-agent", "")
-    fingerprint = hashlib.md5(f"{host}:{ua}".encode()).hexdigest()
-    return f"rate_limit:guest:{fingerprint}:{date.today()}"
+    """未登录用户：按真实 IP 每天一个额度，与设备/浏览器/新开的游戏都无关"""
+    return f"rate_limit:guest:ip:{client_ip(request)}:{date.today()}"
 
 
 # ── 状态查询 ──────────────────────────────────────────────
@@ -37,8 +49,8 @@ def guest_daily_key(request) -> str:
 async def get_quota_status(redis_client, request, user=None) -> dict:
     """返回当前身份的次数状态。
 
-    已登录：每日 6+2 次，另有额外配额与包月不限次数
-    未登录：每日 6 次，用完需要登录
+    未登录：按 IP 每天 DAILY_FREE_MESSAGES 次（跨会话累计，换浏览器不重置）
+    已登录：DAILY_FREE_MESSAGES + DAILY_LOGGED_IN_EXTRA，另有额外配额与包月不限次数
     """
     if user is not None:
         daily_limit = settings.DAILY_FREE_MESSAGES + settings.DAILY_LOGGED_IN_EXTRA
@@ -58,6 +70,8 @@ async def get_quota_status(redis_client, request, user=None) -> dict:
     return {
         "is_guest": is_guest,
         "daily_limit": daily_limit,
+        # 登录后的每日额度，前端提示文案用，避免在页面里写死数字
+        "login_limit": settings.DAILY_FREE_MESSAGES + settings.DAILY_LOGGED_IN_EXTRA,
         "used_today": used,
         "daily_remaining": daily_remaining,
         "extra_quota": max(0, extra),
