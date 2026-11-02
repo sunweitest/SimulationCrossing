@@ -339,6 +339,7 @@ class DeepSeekProvider(LLMProvider):
         use_tools = tools and tool_handler
 
         try:
+            no_think_retry_done = False
             for round_idx in range(max_tool_rounds + 1):
                 response = self._client.chat.completions.create(
                     model=settings.DEEPSEEK_MODEL,
@@ -350,6 +351,27 @@ class DeepSeekProvider(LLMProvider):
                 )
 
                 msg = response.choices[0].message
+
+                # 偶发：模型的 token 预算被 reasoning 吃光，content 返回空串。
+                # 关掉思考重试一次，避免整轮剧情直接掉进模板兜底。
+                if (not msg.tool_calls and not (msg.content or "").strip()
+                        and not no_think_retry_done):
+                    no_think_retry_done = True
+                    logger.warning("DEEPSEEK_EMPTY_RETRY: 空响应，关闭思考重试")
+                    response = self._client.chat.completions.create(
+                        model=settings.DEEPSEEK_MODEL,
+                        messages=messages,
+                        stream=False,
+                        temperature=self._temperature,
+                        max_tokens=self._max_tokens,
+                        tools=tools if use_tools else None,
+                        extra_body={"thinking": {"type": "disabled"}},
+                    )
+                    msg = response.choices[0].message
+                    logger.info(
+                        "DEEPSEEK_EMPTY_RETRY_RESULT: chars=%d",
+                        len(msg.content or ""),
+                    )
 
                 # 无 tool_calls → 最终响应
                 if not msg.tool_calls:
@@ -578,6 +600,25 @@ class DeepSeekProvider(LLMProvider):
                         yield delta
 
                 text = "".join(full_text)
+
+                # 流式偶发只吐 reasoning、content 全空，用户会看到模板兜底。
+                # 关掉思考补一次非流式生成。
+                if not text.strip():
+                    logger.warning("STORY_STREAM_EMPTY: content 为空，关闭思考重试")
+                    retry = await self._async_client.chat.completions.create(
+                        model=settings.DEEPSEEK_MODEL,
+                        messages=messages,
+                        stream=False,
+                        temperature=self._temperature,
+                        max_tokens=self._max_tokens,
+                        extra_body={"thinking": {"type": "disabled"}},
+                    )
+                    text = retry.choices[0].message.content or ""
+                    full_text.append(text)
+                    logger.info("STORY_STREAM_EMPTY_RETRY_RESULT: chars=%d", len(text))
+                    for ch in text:
+                        yield ch
+
                 self._save_raw_log(text, new_session_id)
                 logger.info(
                     "STORY_STREAM_OK: chars=%d time=%.1fs model=%s",
