@@ -1,0 +1,14 @@
+{
+  "size": "1664*928",
+  "cover_name": "金瓶梅封面-深宅帘影",
+  "cover_target": "jinpingmei",
+  "style": "电影感的明代市井宅院场景，写实厚重的环境质感与工笔细部。色调：烛火暖橙、绸缎暗红与夜色暗青形成克制的对比，低饱和、阴翳光影，靠近窗纸的亮部柔和不过曝。氛围：安静、暧昧、有人气但不喧闹，空气里浮着细微尘埃与香烟。画风：35mm 电影镜头质感，浅景深，轻微胶片颗粒与暗角。构图：16:9 宽画幅，画面中部偏侧留出主要人物空间，上方留出天空或屋脊层次。整体亮度偏暗，避免大面积高光过曝。不要出现任何文字、水印、logo、界面元素，不要卡通或二次元风格，不要裸露与情色表现。",
+  "negative": "text, letters, watermark, logo, signature, UI, border, frame, cartoon, anime, cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed hands, extra limbs, duplicate subject, nude, nudity, explicit, cleavage focus, modern clothing, modern smartphone",
+  "items": [
+    {
+      "name": "金瓶梅封面-深宅帘影",
+      "kind": "cover",
+      "prompt": "明代商贾宅院的内景，一场黄昏的私宴刚散。画面中央偏左站着一位身穿明代对襟长衫的女子，半身入画、占画面三分之一，她侧身回头看向观者，面容清晰、神情克制，发髻与耳坠精致，衣料层叠有暗纹，身体包裹严实不露肌肤；她身后是一扇半卷的竹帘与雕花木廊，暖黄纸灯笼的光从侧面打在她身上，逆光勾出清晰的轮廓边光。右侧内室可见红木桌案、酒盏、果碟与翻开的线装书，绸缎坐垫在暗处泛光；左侧前景是石榴树与太湖石，作为暗部框景不抢主体。远处能看见清河县的瓦屋顶与暮色天空。整体含蓄幽微、有故事感，人物是视觉焦点。"
+    }
+  ]
+}

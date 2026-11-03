@@ -13,6 +13,7 @@
 说明：
 - API Key 依次从环境变量 DASHSCOPE_API_KEY、backend/.env 读取，不会打印出来
 - 图片 URL 有时效，生成后立刻下载
+- JSON 里 cover_target 指定封面写到 images/<name>.png 与 covers/<name>.webp（默认 wasteland）
 - 已存在的文件默认跳过，加 --force 覆盖
 """
 
@@ -145,7 +146,8 @@ def gen_one(item: dict, cfg: dict, out_dir: Path, meta_path: Path) -> dict:
     return {"name": name, "status": "fail", "error": last_err}
 
 
-def install_images(out_dir: Path, items: list, cover_name: str | None):
+def install_images(out_dir: Path, items: list, cover_name: str | None,
+                  cover_target: str = "wasteland"):
     """把生成结果装进项目：场景图进 public/images/scene，封面进 images/ + covers/"""
     scene_dir = REPO / "frontend" / "public" / "images" / "scene"
     covers_dir = REPO / "frontend" / "public" / "images" / "covers"
@@ -159,13 +161,13 @@ def install_images(out_dir: Path, items: list, cover_name: str | None):
         if not src.exists():
             continue
         if item.get("kind") == "cover" or item["name"] == cover_name:
-            dst = images_dir / "wasteland.png"
+            dst = images_dir / f"{cover_target}.png"
         else:
             dst = scene_dir / f"{item['name']}.png"
         dst.write_bytes(src.read_bytes())
         copied.append(dst)
 
-    cover = images_dir / "wasteland.png"
+    cover = images_dir / f"{cover_target}.png"
     if cover.exists():
         try:
             from PIL import Image
@@ -173,9 +175,9 @@ def install_images(out_dir: Path, items: list, cover_name: str | None):
             resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
             with Image.open(cover) as im:
                 im.convert("RGB").resize((400, 225), resample).save(
-                    covers_dir / "wasteland.webp", "WEBP", quality=80
+                    covers_dir / f"{cover_target}.webp", "WEBP", quality=80
                 )
-            copied.append(covers_dir / "wasteland.webp")
+            copied.append(covers_dir / f"{cover_target}.webp")
         except ImportError:
             print("提示：没装 Pillow，封面缩略图没生成（uv pip install --python /opt/venv/bin/python pillow）")
 
@@ -260,9 +262,9 @@ def main():
     for r in fail:
         print(f"  失败：{r['name']} → {r.get('error')}")
 
-    if args.install and ok:
+    if args.install and (ok or skip):
         print("\n安装到项目：")
-        install_images(out_dir, items, spec.get("cover_name"))
+        install_images(out_dir, items, spec.get("cover_name"), spec.get("cover_target", "wasteland"))
 
     sys.exit(1 if fail else 0)
 
