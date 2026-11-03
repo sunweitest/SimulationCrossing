@@ -30,12 +30,14 @@ def client_ip(request) -> str:
     只按 IP 计数是刻意的：一旦把 User-Agent 混进指纹，换浏览器、隐身窗口、
     甚至 UA 版本变化都会生成新 key，额度就白给了。
     """
-    real_ip = (request.headers.get("x-real-ip") or "").strip()
-    if real_ip:
-        return real_ip
+    # 顺序很重要：CDN 在前时 nginx 看到的对端是 CDN 节点，真实用户在
+    # X-Forwarded-For 的第一段；直连时 XFF 里也只有客户端 IP。
     forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     if forwarded:
         return forwarded
+    real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if real_ip:
+        return real_ip
     return request.client.host if request.client else "unknown"
 
 
