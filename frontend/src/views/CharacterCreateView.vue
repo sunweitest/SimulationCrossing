@@ -186,6 +186,7 @@
               <div class="input-group">
                 <label>初始身份</label>
                 <select v-model="form.rank" class="input">
+                  <option v-if="form.rank && !standardRanks.includes(form.rank)" :value="form.rank">{{ form.rank }}</option>
                   <optgroup label="皇族贵胄">
                     <option>皇帝</option><option>皇后</option><option>太子</option>
                     <option>皇子</option><option>公主</option><option>王爷</option>
@@ -348,6 +349,7 @@ const selectedChar = ref(null)    // 选中的角色对象；自定义时为 { c
 const voteCandidates = ref([])
 const voteTotal = ref(0)
 const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
+const standardRanks = ['皇帝','皇后','太子','皇子','公主','王爷','王妃','贵妃','将军','军师','士兵','文官','小吏','太监','侠客','读书人','商人','大小姐','平民','宫女','道士','僧人','郎中','未知']
 const myCharacters = ref([])        // 当前世界里我自己的自定义角色
 const editingCustomId = ref(null)   // 正在修改的自定义角色 id（null = 新建）
 
@@ -594,7 +596,7 @@ const selectMyCharacter = (mc) => {
   selectedChar.value = { custom: true, name: mc.name, timelines: [] }
   fillCustomForm(mc)
   if (!form.value.timeline) form.value.timeline = timelines.value[0] || ''
-  step.value = 'time'
+  step.value = 'character'
 }
 
 const editMyCharacter = (mc) => {
@@ -734,7 +736,8 @@ const applyPresetToForm = (detail) => {
 }
 
 watch(characterType, () => {
-  if (characterType.value === 'custom') {
+  // 从「我的角色」点进来时不要清空表单（editingCustomId 已设）
+  if (characterType.value === 'custom' && !editingCustomId.value) {
     form.value.name = ''
     form.value.age = 20
     form.value.rank = '未知'
