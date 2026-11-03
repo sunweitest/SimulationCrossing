@@ -51,6 +51,9 @@ class GameSession(Base):
     # 结构化角色追踪
     characters_state = Column(JSON, nullable=True)  # {"characters": [...], "last_updated_turn": N}
 
+    # 使命进度：{title, goal, stages, stage_index, deadline_turns, days_left, status, last_note}
+    mission_state = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=now_cn)
     updated_at = Column(DateTime, default=now_cn, onupdate=now_cn)
 
@@ -125,6 +128,8 @@ class CharacterTimeline(Base):
     timeline = Column(String, nullable=False)
     background = Column(Text)
     initial_scene = Column(Text, nullable=False)
+    # 使命：{title, goal, stages:[{name, detail}], deadline_turns, stakes}
+    mission = Column(JSON, nullable=True)
 
     character = relationship("PresetCharacter", back_populates="timelines")
 

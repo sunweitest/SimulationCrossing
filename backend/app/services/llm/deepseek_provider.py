@@ -127,6 +127,12 @@ METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
   "game_update": {
     "points_awarded": 5,
     "new_achievement": ""
+  },
+  "mission_update": {
+    "advance": true,
+    "stage_done": false,
+    "setback": false,
+    "note": "一句话说明本回合的进展"
   }
 }
 
@@ -134,6 +140,9 @@ METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
 - choices 必须有 3 个，每个 10-26 字，导向不同策略分支。
 - points_awarded 为 0-15 的整数，有利于玩家利益最大化的行为（1-5分），展现智慧与谋略的行为（3-8分），推动人类文明向前、向善发展的重大举措（8-15分）.
 - 没有明确里程碑时 new_achievement 返回空字符串。
+- mission_update 用于判定使命推进：advance=这一步让当前阶段更近了；stage_done=当前阶段的目标已经达成；setback=付出了代价或倒退；note 用一句话写清楚发生了什么。
+- stage_done 只看当前阶段的目标本身是否已经实现：目标达成即 true，哪怕后面还有麻烦、还有代价，也要判 true。不要因为"事情还没完"而判 false。
+- 没有使命时 mission_update 返回 null。
 - 不要重复剧情正文。"""
 
 
@@ -216,6 +225,12 @@ WASTELAND_METADATA_SYSTEM_PROMPT = """你是废土生存互动小说的规则裁
   "game_update": {
     "points_awarded": 5,
     "new_achievement": ""
+  },
+  "mission_update": {
+    "advance": true,
+    "stage_done": false,
+    "setback": false,
+    "note": "一句话说明本回合的进展"
   }
 }
 
@@ -223,6 +238,9 @@ WASTELAND_METADATA_SYSTEM_PROMPT = """你是废土生存互动小说的规则裁
 - choices 必须有 3 个，每个 10-26 字，导向不同策略分支。
 - points_awarded 为 0-15 的整数，保障生存/获取关键资源的行为（1-5分），展现智慧与策略的布局（3-8分），推动废土秩序重建或拯救文明余烬的重大举措（8-15分）。
 - 没有明确里程碑时 new_achievement 返回空字符串。
+- mission_update 用于判定使命推进：advance=这一步让当前阶段更近了；stage_done=当前阶段的目标已经达成；setback=付出了代价或倒退；note 用一句话写清楚发生了什么。
+- stage_done 只看当前阶段的目标本身是否已经实现：目标达成即 true，哪怕后面还有麻烦、还有代价，也要判 true。不要因为"事情还没完"而判 false。
+- 没有使命时 mission_update 返回 null。
 - 不要重复剧情正文。"""
 
 
@@ -663,7 +681,9 @@ class DeepSeekProvider(LLMProvider):
 已生成剧情：
 {scene_description[:4000]}
 
-请生成行动选项、积分和成就。"""
+请生成行动选项、积分和成就。
+
+要求：3 个选项分别对应 ① 直接推进当前使命 ② 代价更大的激进做法 ③ 旁路或自保；不要给纯氛围动作。"""
 
         # 选项/积分/成就默认走 DeepSeek；仅在显式开启 USE_QWEN_METADATA 且配了
         # DASHSCOPE_API_KEY 时才优先用 Qwen，失败自动回落 DeepSeek
@@ -704,6 +724,7 @@ class DeepSeekProvider(LLMProvider):
         return {
             "choices": ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"],
             "game_update": {"points_awarded": 5, "new_achievement": ""},
+            "mission_update": None,
         }
 
     def _assemble_messages(
@@ -770,16 +791,62 @@ class DeepSeekProvider(LLMProvider):
             user_input: str,
     ) -> str:
         """构建发送给 LLM 的用户消息"""
+        mission_block = self._build_mission_block(character_info)
         return f"""角色信息：
 - 姓名：{character_info['name']}
 - 身份：{character_info['rank']}
 - 背景：{effective_background}
 - 所处世界：{character_info['novel']}
 - 时间节点：{character_info['timeline']}
-
+{mission_block}
 我的行动：「{user_input}」
 
 请根据以上信息生成接下来的剧情。"""
+
+    @staticmethod
+    def _build_mission_block(character_info: Dict) -> str:
+        """把当前使命/阶段/倒计时拼成提示词片段；没有使命时返回空串。"""
+        ms = character_info.get("mission_state") or {}
+        mission = ms.get("mission") if isinstance(ms.get("mission"), dict) else None
+        if not mission and isinstance(character_info.get("mission"), dict):
+            # 开局第一回合：只有定义，还没有进度
+            mission = character_info["mission"]
+            ms = {"stage_index": 0, "days_left": mission.get("deadline_turns", 10)}
+        if not mission:
+            return ""
+
+        stages = mission.get("stages") or []
+        idx = int(ms.get("stage_index") or 0)
+        days_left = ms.get("days_left")
+        status = ms.get("status") or "active"
+
+        lines = [
+            "",
+            "【你的使命】（这一局的核心目标，不是任务清单）",
+            f"- 使命：{mission.get('title', '')}",
+            f"- 目标：{mission.get('goal', '')}",
+            f"- 赌注：{mission.get('stakes', '')}",
+        ]
+        if stages:
+            if idx < len(stages):
+                cur = stages[idx]
+                lines.append(f"- 当前阶段（{idx + 1}/{len(stages)}）：{cur.get('name', '')}——{cur.get('detail', '')}")
+            else:
+                lines.append(f"- 三个阶段都已走完，只剩收尾")
+        if days_left is not None:
+            lines.append(f"- 剩余时间：{days_left} 个回合")
+        if status == "failed":
+            lines.append("- 状态：期限已过，使命失败——但故事没结束，你要面对后果")
+
+        lines += [
+            "",
+            "【写作要求】",
+            "1. 这一段剧情必须让使命前进一步，或者为停滞付出代价。不要写成与使命无关的日常和支线细节。",
+            "2. 可以失败，可以转向，但玩家要能感觉到代价：失去时间、盟友、掩护、信誉其中之一。",
+            "3. 剧情里要有一点具体的压力（期限、追兵、被怀疑、资源见底），不要只是氛围描写。",
+            "4. 不要替玩家宣布使命完成——是否达成由玩家的行动决定。",
+        ]
+        return "\n".join(lines)
 
     def _clean_response(self, raw_text: str) -> str:
         """清理 DeepSeek 响应，提取纯 JSON"""
@@ -873,13 +940,79 @@ class DeepSeekProvider(LLMProvider):
             points = 5
         points = max(0, min(points, 15))
 
+        mission_update = result.get("mission_update")
+        if not isinstance(mission_update, dict):
+            mission_update = None
+
         return {
             "choices": choices[:settings.CHOICE_COUNT],
             "game_update": {
                 "points_awarded": points,
                 "new_achievement": str(game_update.get("new_achievement") or "").strip(),
             },
+            "mission_update": mission_update,
         }
+
+    async def judge_mission(
+        self,
+        scene_description: str,
+        character_info: Dict,
+        user_input: str,
+    ) -> Optional[Dict]:
+        """独立判定使命推进。比塞进选项生成里准得多：模型一次只回答一个问题。"""
+        stored = character_info.get("mission_state") or {}
+        mission = stored.get("mission") if isinstance(stored.get("mission"), dict) else character_info.get("mission")
+        if not isinstance(mission, dict):
+            return None
+        stages = mission.get("stages") or []
+        idx = int(stored.get("stage_index") or 0)
+        if idx >= len(stages):
+            return {"advance": False, "stage_done": False, "setback": False, "note": "阶段已全部完成"}
+        stage = stages[idx]
+
+        prompt = f"""你是互动小说的进度裁判，只做一件事：判断这一步有没有推进当前阶段。
+
+【使命】{mission.get('title', '')}：{mission.get('goal', '')}
+【当前阶段 {idx + 1}/{len(stages)}】{stage.get('name', '')}——{stage.get('detail', '')}
+【剩余回合】{stored.get('days_left', mission.get('deadline_turns'))}
+【玩家行动】{user_input}
+
+【本回合剧情】
+{scene_description[:3000]}
+
+只输出一个 JSON，不要解释：
+{{"advance": true/false, "stage_done": true/false, "setback": true/false, "note": "20字以内"}}
+
+判定规则：
+- stage_done：剧情里是否已经出现了「{stage.get('name', '')}」所描述的结果。出现了就是 true，哪怕之后还有麻烦、还有代价，也判 true。
+- advance：明显朝这个结果前进（拿到东西、清掉障碍、说服关键人、走到目的地），但结果还没完全达成。
+- setback：损失了时间、人、物资、信誉，或者暴露了行踪。
+- 三者可以并存，例如 stage_done=true 且 setback=true。
+- note 只写这一步实际发生了什么，不要复述剧情。"""
+
+        try:
+            response = self._client.chat.completions.create(
+                model=settings.DEEPSEEK_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                stream=False,
+                temperature=0,
+                max_tokens=160,
+                **_thinking_kwargs(),
+            )
+            text = (response.choices[0].message.content or "").strip()
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            data = json.loads(match.group(0) if match else text)
+            return {
+                "advance": bool(data.get("advance")),
+                "stage_done": bool(data.get("stage_done")),
+                "setback": bool(data.get("setback")),
+                "note": str(data.get("note") or "")[:40],
+            }
+        except Exception as e:
+            logger.warning("MISSION_JUDGE_ERR: %s", e)
+            return None
 
     async def generate_choices(
             self,

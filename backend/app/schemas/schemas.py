@@ -88,6 +88,8 @@ class Scene(BaseModel):
     choices: List[str]
     game_update: GameUpdate
     scene_image: Optional[str] = None  # 匹配的场景配图URL，无匹配时为 null
+    mission: Optional[dict] = None  # 使命进度
+    mission_achievements: Optional[List[str]] = None  # 本回合解锁的使命成就：{title, goal, stage_index, stages, days_left, status, last_label}
 
 
 class UserAction(BaseModel):
@@ -122,6 +124,7 @@ class GameSessionResponse(BaseModel):
     achievements: List[str]
     current_scene: Optional[dict]
     characters_state: Optional[dict] = None
+    mission_state: Optional[dict] = None
     created_at: datetime
     updated_at: datetime
 

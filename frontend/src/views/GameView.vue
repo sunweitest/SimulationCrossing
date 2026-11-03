@@ -31,6 +31,39 @@
       </div>
     </div>
 
+    <!-- ===== 使命条 ===== -->
+    <div
+      v-if="mission"
+      class="mission-bar"
+      :class="{ 'mb-open': missionOpen, 'mb-failed': mission.status === 'failed', 'mb-done': mission.status === 'done' }"
+      @click="missionOpen = !missionOpen"
+    >
+      <span class="mb-mark">◎</span>
+      <span class="mb-title">{{ mission.title }}</span>
+      <span v-if="mission.status === 'done'" class="mb-chip mb-chip-done">使命达成</span>
+      <span v-else-if="mission.status === 'failed'" class="mb-chip mb-chip-failed">使命未竟</span>
+      <template v-else>
+        <span class="mb-chip">阶段 {{ Math.min(mission.stage_index + 1, mission.stage_count) }}/{{ mission.stage_count }}</span>
+        <span class="mb-chip mb-days" :class="{ 'mb-urgent': mission.days_left <= 3 }">剩 {{ mission.days_left }} 回合</span>
+      </template>
+      <span v-if="mission.last_label" class="mb-last" :class="`mb-last-${mission.last_label}`">{{ mission.last_label }}</span>
+    </div>
+
+    <div v-if="mission && missionOpen" class="mission-panel">
+      <p class="mp-goal">{{ mission.goal }}</p>
+      <ol class="mp-stages">
+        <li
+          v-for="(stage, i) in mission.stages"
+          :key="i"
+          :class="{ 'mp-done': i < mission.stage_index, 'mp-current': i === mission.stage_index }"
+        >
+          <span class="mp-dot">{{ i < mission.stage_index ? '✓' : i + 1 }}</span>{{ stage }}
+        </li>
+      </ol>
+      <p class="mp-stakes">赌注：{{ mission.stakes }}</p>
+      <p v-if="mission.last_note" class="mp-note">上一回合：{{ mission.last_note }}</p>
+    </div>
+
     <!-- ===== 剧情文字浮层（居中，固定尺寸，带滑动） ===== -->
     <div v-if="currentScene" class="story-overlay">
       <div class="story-text" ref="storyTextEl">
@@ -389,6 +422,33 @@ const autoResize = () => {
 
 const currentScene = computed(() => gameStore.currentSession?.current_scene)
 
+const missionOpen = ref(false)
+
+// 使命视图：优先用本回合返回的 public 视图，刷新页面时从 session.mission_state 还原
+const mission = computed(() => {
+  const fromScene = currentScene.value?.mission
+  if (fromScene) return fromScene
+  const ms = gameStore.currentSession?.mission_state
+  if (!ms || !ms.mission) return null
+  const m = ms.mission
+  const stages = (m.stages || []).map((s) => s.name || '')
+  const idx = ms.stage_index || 0
+  return {
+    title: m.title || '',
+    goal: m.goal || '',
+    stakes: m.stakes || '',
+    stages,
+    stage_index: idx,
+    stage_count: stages.length,
+    stage_name: stages[idx] || '',
+    days_left: ms.days_left ?? ms.deadline_turns ?? 0,
+    deadline_turns: ms.deadline_turns || 0,
+    status: ms.status || 'active',
+    last_label: ms.last_label || '',
+    last_note: ms.last_note || '',
+  }
+})
+
 const worldImageMap = {
   '三国演义': { src: sanguoImage },
   '水浒传': { src: shuihuImage },
@@ -488,6 +548,10 @@ const performAction = async (action) => {
           displayedScene.value = scenePayload.scene_description
         }
         currentSceneImage.value = scenePayload.scene_image || null
+        for (const ach of scenePayload.mission_achievements || []) {
+          const list = gameStore.currentSession.achievements || []
+          if (!list.includes(ach)) gameStore.currentSession.achievements = [...list, ach]
+        }
         isAwaitingOptions.value = false
       }
     })
@@ -1289,5 +1353,88 @@ const newGame = () => {
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
   .turns-modal { width: 94vw; max-height: 86vh; }
+}
+/* ===== 使命条 ===== */
+.mission-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 52px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(680px, 92vw);
+  padding: 6px 14px 6px 10px;
+  border-radius: 999px;
+  background: rgba(18, 16, 14, 0.62);
+  border: 1px solid rgba(214, 178, 108, 0.28);
+  backdrop-filter: blur(10px);
+  color: #e8dfcc;
+  font-size: 12.5px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s, border-color 0.2s;
+}
+.mission-bar:hover { background: rgba(28, 24, 20, 0.78); border-color: rgba(214, 178, 108, 0.5); }
+.mb-mark { color: #d6b26c; font-size: 13px; }
+.mb-title { font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 34vw; }
+.mb-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(214, 178, 108, 0.12);
+  color: #cbb98f;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.mb-days { color: #c9d6b0; }
+.mb-urgent { color: #f0a884; background: rgba(224, 118, 74, 0.16); }
+.mb-chip-done { color: #9ed39a; background: rgba(120, 190, 120, 0.16); }
+.mb-chip-failed { color: #e59a8a; background: rgba(200, 90, 80, 0.18); }
+.mb-last { font-size: 11px; opacity: 0.72; white-space: nowrap; }
+.mb-last-推进 { color: #9ed39a; opacity: 1; }
+.mb-last-恶化 { color: #e59a8a; opacity: 1; }
+.mb-open { border-color: rgba(214, 178, 108, 0.6); }
+
+.mission-panel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 92px;
+  z-index: 29;
+  width: min(520px, 90vw);
+  padding: 14px 18px 12px;
+  border-radius: 14px;
+  background: rgba(16, 14, 12, 0.9);
+  border: 1px solid rgba(214, 178, 108, 0.24);
+  backdrop-filter: blur(14px);
+  color: #ddd3bf;
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.mp-goal { margin: 0 0 10px; color: #efe6d2; }
+.mp-stages { margin: 0 0 10px; padding: 0; list-style: none; }
+.mp-stages li { display: flex; align-items: flex-start; gap: 8px; padding: 3px 0; color: #9d9382; }
+.mp-dot {
+  flex: 0 0 18px; height: 18px; margin-top: 1px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid rgba(214, 178, 108, 0.3);
+  font-size: 10.5px; color: #b8a67e;
+}
+.mp-current { color: #efe6d2; }
+.mp-current .mp-dot { border-color: #d6b26c; color: #d6b26c; background: rgba(214, 178, 108, 0.14); }
+.mp-done { color: #7d8a70; text-decoration: line-through; text-decoration-color: rgba(120, 150, 110, 0.5); }
+.mp-done .mp-dot { border-color: rgba(120, 190, 120, 0.5); color: #9ed39a; }
+.mp-stakes { margin: 0 0 4px; font-size: 12px; color: #b8a68a; }
+.mp-note { margin: 0; font-size: 12px; color: #8e8578; }
+
+@media (max-width: 600px) {
+  .mission-bar { top: 46px; font-size: 11.5px; gap: 6px; padding: 5px 10px 5px 8px; max-width: 94vw; }
+  .mb-title { max-width: 30vw; }
+  .mb-chip { padding: 2px 6px; font-size: 10.5px; }
+  .mb-last { display: none; }
+  .mission-panel { top: 84px; width: 92vw; padding: 12px 14px 10px; font-size: 12.5px; }
 }
 </style>

@@ -175,6 +175,9 @@ async def create_game_session(
         points=session_character["starting_points"],
         achievements=[]
     )
+    game_session.mission_state = GameService.init_mission_state(
+        (character_info or {}).get("mission")
+    )
 
     # 创建初始场景
     if character.character_type == "preset" and character_info:
@@ -192,6 +195,7 @@ async def create_game_session(
         }
         game_session.achievements.append("穿越开始")
 
+    initial_scene["mission"] = GameService.mission_public(game_session)
     game_session.current_scene = initial_scene
 
     # 保存到数据库
@@ -256,7 +260,8 @@ async def perform_action(
         'rank': game_session.character_rank,
         'background': game_session.character_background,
         'novel': game_session.novel,
-        'timeline': game_session.timeline
+        'timeline': game_session.timeline,
+        'mission_state': game_session.mission_state,
     }
 
     # 如果是预设角色，获取动态背景
@@ -353,8 +358,29 @@ async def perform_action(
     else:
         new_scene["scene_image"] = None
 
-    # 更新游戏状态
+    # 使命判定（有使命才会多一次轻量调用）
+    mission_res = {"points": 0, "achievements": [], "mission": None}
+    if isinstance(game_session.mission_state, dict):
+        try:
+            judged = await GameService.judge_mission(
+                new_scene["scene_description"], character_info, action_data.action
+            )
+            mission_res = GameService.apply_mission_update(game_session, judged)
+        except Exception as e:
+            logger.warning("MISSION_JUDGE_FAIL: session=%d %s", game_session.id, e)
+            mission_res["mission"] = GameService.mission_public(game_session)
+    new_scene["mission"] = mission_res["mission"]
+
+    # 更新游戏状态（使命积分并入本回合得分，前端只加一次）
+    if mission_res["points"]:
+        new_scene["game_update"]["points_awarded"] += mission_res["points"]
+    new_scene["mission_achievements"] = mission_res["achievements"]
     game_session.points += new_scene['game_update']['points_awarded']
+    for _ach in mission_res["achievements"]:
+        _list = list(game_session.achievements) if game_session.achievements else []
+        if _ach not in _list:
+            _list.append(_ach)
+        game_session.achievements = _list
     new_achievement = new_scene['game_update']['new_achievement']
     if new_achievement and new_achievement not in game_session.achievements:
         achievements_list = list(game_session.achievements) if game_session.achievements else []
@@ -441,6 +467,7 @@ async def perform_action_stream(
         "background": game_session.character_background,
         "novel": game_session.novel,
         "timeline": game_session.timeline,
+        "mission_state": game_session.mission_state,
     }
 
     if game_session.character_type == "preset":
@@ -516,17 +543,31 @@ async def perform_action_stream(
             character_info,
             action_data.action,
         )
+        mission_coro = (
+            GameService.judge_mission(scene_description, character_info, action_data.action)
+            if isinstance(game_session_local.mission_state, dict)
+            else None
+        )
         image_coro = (
             matcher.find_best_match(scene_description, novel=game_session_local.novel)
             if matcher and matcher.is_ready
             else None
         )
 
-        if image_coro:
+        if image_coro and mission_coro:
+            metadata, scene_image, mission_update = await asyncio.gather(
+                metadata_coro, image_coro, mission_coro
+            )
+        elif image_coro:
             metadata, scene_image = await asyncio.gather(metadata_coro, image_coro)
+            mission_update = None
+        elif mission_coro:
+            metadata, mission_update = await asyncio.gather(metadata_coro, mission_coro)
+            scene_image = None
         else:
             metadata = await metadata_coro
             scene_image = None
+            mission_update = None
 
         new_scene = {
             "scene_description": scene_description,
@@ -534,6 +575,13 @@ async def perform_action_stream(
             "game_update": metadata["game_update"],
             "scene_image": scene_image,
         }
+        mission_res = GameService.apply_mission_update(
+            game_session_local, mission_update or metadata.get("mission_update")
+        )
+        new_scene["mission"] = mission_res["mission"]
+        if mission_res["points"]:
+            new_scene["game_update"]["points_awarded"] += mission_res["points"]
+        new_scene["mission_achievements"] = mission_res["achievements"]
 
         if new_session_id:
             game_session_local.session_id = new_session_id
@@ -544,6 +592,12 @@ async def perform_action_stream(
             achievements_list = list(game_session_local.achievements) if game_session_local.achievements else []
             achievements_list.append(new_achievement)
             game_session_local.achievements = achievements_list
+
+        for _ach in mission_res["achievements"]:
+            _list = list(game_session_local.achievements) if game_session_local.achievements else []
+            if _ach not in _list:
+                _list.append(_ach)
+            game_session_local.achievements = _list
 
         game_session_local.current_scene = new_scene
 
@@ -917,11 +971,27 @@ async def rewind_session(
             rebuilt.append(name)
     game_session.achievements = rebuilt
 
+    # 使命：天数按保留回合重算；已走过的阶段不回退（视为既成事实）
+    ms = game_session.mission_state
+    if isinstance(ms, dict) and isinstance(ms.get("mission"), dict):
+        ms = dict(ms)
+        ms["turns_used"] = len(kept)
+        ms["days_left"] = max(
+            0,
+            int(ms.get("deadline_turns") or 10) - len(kept) - int(ms.get("penalty") or 0),
+        )
+        if ms.get("status") == "failed" and ms["days_left"] > 0:
+            ms["status"] = "active"
+        ms["last_label"] = ""
+        ms["last_note"] = ""
+        game_session.mission_state = ms
+
     game_session.current_scene = {
         "scene_description": last_kept.scene_description,
         "choices": last_kept.choices or [],
         "game_update": {"points_awarded": 0, "new_achievement": ""},
         "scene_image": last_kept.scene_image,
+        "mission": GameService.mission_public(game_session),
     }
 
     # 摘要与人物状态覆盖了被删除的回合，清空让下次压缩重建

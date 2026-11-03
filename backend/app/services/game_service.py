@@ -227,6 +227,107 @@ class GameService:
             "timeline": timeline,
             "dynamic_background": tl_match.background,
             "initial_scene_desc": tl_match.initial_scene,
+            "mission": tl_match.mission,
+        }
+
+    # ── 使命推进 ──────────────────────────────────────────
+
+    @staticmethod
+    def init_mission_state(mission: Optional[Dict]) -> Optional[Dict]:
+        """开局：把角色使命定义变成一份可推进的进度状态。"""
+        if not isinstance(mission, dict) or not mission.get("stages"):
+            return None
+        deadline = int(mission.get("deadline_turns") or 10)
+        return {
+            "mission": mission,
+            "stage_index": 0,
+            "deadline_turns": deadline,
+            "days_left": deadline,
+            "turns_used": 0,
+            "penalty": 0,
+            "status": "active",     # active / done / failed
+            "last_label": "",       # 推进 / 停滞 / 恶化
+            "last_note": "",
+            "log": [],
+        }
+
+    @staticmethod
+    def apply_mission_update(session, update: Optional[Dict]) -> Dict:
+        """按本回合判定推进使命，返回 {"points": 额外积分, "achievements": [...], "mission": 摘要}。"""
+        result = {"points": 0, "achievements": [], "mission": None}
+        stored = session.mission_state
+        if not isinstance(stored, dict) or not isinstance(stored.get("mission"), dict):
+            return result
+
+        # 注意：必须复制后整体赋值。原地改 JSON 列里的 dict，SQLAlchemy 记录的新旧值
+        # 是同一个对象，flush 时判定“没变化”，更新会静默丢失。
+        ms = dict(stored)
+        ms["log"] = list(ms.get("log") or [])
+
+        mission = ms["mission"]
+        stages = mission.get("stages") or []
+        upd = update if isinstance(update, dict) else {}
+
+        advance = bool(upd.get("advance"))
+        stage_done = bool(upd.get("stage_done"))
+        setback = bool(upd.get("setback"))
+        note = str(upd.get("note") or "")[:60]
+
+        ms["turns_used"] = int(ms.get("turns_used") or 0) + 1
+        if setback:
+            # 代价上限 = 期限的 1/3，避免连续恶化把使命直接烧穿
+            penalty_cap = max(1, int(ms.get("deadline_turns") or 12) // 3)
+            ms["penalty"] = min(int(ms.get("penalty") or 0) + 1, penalty_cap)
+        ms["days_left"] = max(
+            0,
+            int(ms.get("deadline_turns") or 10) - ms["turns_used"] - int(ms.get("penalty") or 0),
+        )
+
+        if stage_done and ms.get("status") == "active":
+            idx = int(ms.get("stage_index") or 0)
+            if idx < len(stages):
+                ms["stage_index"] = idx + 1
+                result["points"] += 10
+                result["achievements"].append(f"阶段达成：{stages[idx].get('name', '')}")
+                ms["log"].append({"turn": ms["turns_used"], "stage": stages[idx].get("name", ""), "note": note})
+
+        if ms.get("status") == "active" and int(ms.get("stage_index") or 0) >= len(stages):
+            ms["status"] = "done"
+            result["points"] += 20
+            result["achievements"].append(f"使命达成：{mission.get('title', '')}")
+        elif ms.get("status") == "active" and ms["days_left"] <= 0:
+            ms["status"] = "failed"
+            result["achievements"].append(f"使命未竟：{mission.get('title', '')}")
+
+        ms["last_label"] = "推进" if (advance or stage_done) else ("恶化" if setback else "停滞")
+        ms["last_note"] = note
+
+        session.mission_state = ms  # 复制后整体赋值，确保被判定为脏数据
+        result["mission"] = GameService.mission_public(session)
+        return result
+
+    @staticmethod
+    def mission_public(session) -> Optional[Dict]:
+        """给前端的最小使命视图。"""
+        ms = session.mission_state
+        if not isinstance(ms, dict) or not isinstance(ms.get("mission"), dict):
+            return None
+        mission = ms["mission"]
+        stages = mission.get("stages") or []
+        idx = int(ms.get("stage_index") or 0)
+        return {
+            "title": mission.get("title", ""),
+            "goal": mission.get("goal", ""),
+            "stakes": mission.get("stakes", ""),
+            "stage_index": idx,
+            "stage_count": len(stages),
+            "stage_name": stages[idx].get("name", "") if idx < len(stages) else "",
+            "stages": [s.get("name", "") for s in stages],
+            "days_left": int(ms.get("days_left") or 0),
+            "deadline_turns": int(ms.get("deadline_turns") or 0),
+            "status": ms.get("status", "active"),
+            "last_label": ms.get("last_label", ""),
+            "last_note": ms.get("last_note", ""),
         }
 
     # ── 对话历史与上下文压缩 ──────────────────────────────
@@ -535,6 +636,21 @@ class GameService:
             "choices": choices,
             "game_update": {"points_awarded": 5, "new_achievement": ""},
         }
+
+    @staticmethod
+    async def judge_mission(
+        scene_description: str,
+        character_info: Dict,
+        user_input: str,
+    ) -> Optional[Dict]:
+        """调用独立的使命裁判；不支持时返回 None（由调用方按停滞处理）。"""
+        provider = get_provider()
+        if hasattr(provider, "judge_mission"):
+            try:
+                return await provider.judge_mission(scene_description, character_info, user_input)
+            except Exception as e:
+                logger.warning("JUDGE_MISSION_FAIL: %s", e)
+        return None
 
     @staticmethod
     def parse_llm_response(raw_text: str, game_session_id: int = 0) -> Optional[Dict]:
