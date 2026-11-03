@@ -90,7 +90,18 @@ async def call_summarization(prompt: str) -> Optional[str]:
         client = OpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL,
+            timeout=settings.LLM_PRIMARY_TIMEOUT,
+            max_retries=settings.LLM_PRIMARY_MAX_RETRIES,
         )
+        # 备用：主链路 503/超时时用阿里云百炼，压缩不能因为上游繁忙就停掉
+        fallback = None
+        if settings.LLM_FAILOVER_ENABLED and settings.DASHSCOPE_API_KEY:
+            fallback = OpenAI(
+                api_key=settings.DASHSCOPE_API_KEY,
+                base_url=settings.LLM_FALLBACK_BASE_URL,
+                timeout=60.0,
+                max_retries=1,
+            )
 
         messages = [
             {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
@@ -101,14 +112,26 @@ async def call_summarization(prompt: str) -> Optional[str]:
             # 第 2 次关掉思考：推理模型可能把 max_tokens 全花在 reasoning 上，
             # content 返回空串（SUMMARIZE_EMPTY），压缩就白跑了。
             extra = {"extra_body": {"thinking": {"type": "disabled"}}} if attempt == 2 else {}
-            response = client.chat.completions.create(
-                model=settings.DEEPSEEK_PRO_MODEL,
-                messages=messages,
-                temperature=0.3,
-                max_tokens=1024,
-                stream=False,
-                **{**_thinking_kwargs(), **extra},
-            )
+            try:
+                response = client.chat.completions.create(
+                    model=settings.DEEPSEEK_PRO_MODEL,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
+                    stream=False,
+                    **{**_thinking_kwargs(), **extra},
+                )
+            except Exception as primary_err:
+                if not fallback:
+                    raise
+                logger.warning("SUMMARIZE_FAILOVER: %s", str(primary_err)[:160])
+                response = fallback.chat.completions.create(
+                    model=settings.LLM_FALLBACK_MODEL,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
+                    stream=False,
+                )
             summary = (response.choices[0].message.content or "").strip()
             if summary:
                 break

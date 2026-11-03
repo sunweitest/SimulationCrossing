@@ -60,6 +60,18 @@ class Settings(BaseSettings):
     QWEN_MODEL: str = "qwen-plus"
     QWEN_METADATA_MODEL: str = "qwen-plus"
     # 行动选项/积分/成就 是否优先用 Qwen 生成；false（默认）= 统一走 DeepSeek
+    # ── LLM 故障转移 ─────────────────────────────────────
+    # 主链路 DeepSeek 直连超时/503/限流时，自动切到阿里云百炼的同名模型，
+    # 用户无感知；两条都失败才走兜底文案。
+    LLM_FAILOVER_ENABLED: bool = True
+    LLM_FALLBACK_BASE_URL: str = "https://llm-t2prhzae03osgg8c.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+    LLM_FALLBACK_MODEL: str = "deepseek-v4.1-flash"
+    LLM_FALLBACK_METADATA_MODEL: str = "qwen-plus"
+    LLM_PRIMARY_TIMEOUT: float = 45.0
+    LLM_METADATA_TIMEOUT: float = 25.0
+    LLM_PRIMARY_MAX_RETRIES: int = 1
+    LLM_FIRST_TOKEN_TIMEOUT: float = 8.0   # 首字迟迟不来就换链路，别让用户对着光标等
+
     USE_QWEN_METADATA: bool = False
 
     # CORS配置

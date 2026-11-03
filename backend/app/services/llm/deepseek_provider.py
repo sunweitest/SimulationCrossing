@@ -273,16 +273,36 @@ class DeepSeekProvider(LLMProvider):
     """
 
     def __init__(self):
+        # 超时与重试要克制：503/超时时快速失败，交给备用链路，
+        # 否则用户看到的就是“选项一直转圈”。
         self._client = OpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL,
-            timeout=90.0,  # 单次请求超时 90s
+            timeout=settings.LLM_PRIMARY_TIMEOUT,
+            max_retries=settings.LLM_PRIMARY_MAX_RETRIES,
         )
         self._async_client = AsyncOpenAI(
             api_key=settings.DEEPSEEK_API_KEY,
             base_url=settings.DEEPSEEK_BASE_URL,
-            timeout=90.0,
+            timeout=settings.LLM_PRIMARY_TIMEOUT,
+            max_retries=settings.LLM_PRIMARY_MAX_RETRIES,
         )
+        # 备用链路：阿里云百炼（同一个 deepseek-v4.1-flash，风格一致）
+        self._fallback_client = None
+        self._fallback_async_client = None
+        if settings.LLM_FAILOVER_ENABLED and settings.DASHSCOPE_API_KEY:
+            self._fallback_client = OpenAI(
+                api_key=settings.DASHSCOPE_API_KEY,
+                base_url=settings.LLM_FALLBACK_BASE_URL,
+                timeout=60.0,
+                max_retries=1,
+            )
+            self._fallback_async_client = AsyncOpenAI(
+                api_key=settings.DASHSCOPE_API_KEY,
+                base_url=settings.LLM_FALLBACK_BASE_URL,
+                timeout=60.0,
+                max_retries=1,
+            )
         # Qwen 客户端用于生成行动选项/积分/成就（依赖 DASHSCOPE_API_KEY）
         self._qwen_client = None
         if settings.DASHSCOPE_API_KEY:
@@ -293,6 +313,46 @@ class DeepSeekProvider(LLMProvider):
             )
         self._temperature = settings.DEEPSEEK_TEMPERATURE
         self._max_tokens = settings.DEEPSEEK_MAX_TOKENS
+
+    # ── 故障转移封装 ─────────────────────────────────────
+    def _create(self, **kwargs):
+        """同步调用：主链路失败自动切阿里云同模型。"""
+        try:
+            return self._client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if not self._fallback_client:
+                raise
+            logger.warning("LLM_FAILOVER(sync): %s -> fallback model=%s err=%s",
+                           kwargs.get("model"), settings.LLM_FALLBACK_MODEL, str(e)[:160])
+            kw = dict(kwargs)
+            kw["model"] = settings.LLM_FALLBACK_MODEL
+            return self._fallback_client.chat.completions.create(**kw)
+
+    async def _acreate(self, **kwargs):
+        """异步非流式调用：主链路失败自动切阿里云。"""
+        try:
+            return await self._async_client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if not self._fallback_async_client:
+                raise
+            logger.warning("LLM_FAILOVER(async): %s -> fallback model=%s err=%s",
+                           kwargs.get("model"), settings.LLM_FALLBACK_MODEL, str(e)[:160])
+            kw = dict(kwargs)
+            kw["model"] = settings.LLM_FALLBACK_MODEL
+            return await self._fallback_async_client.chat.completions.create(**kw)
+
+    async def _acreate_stream(self, **kwargs):
+        """异步流式：建流失败时切备用；已在输出中途失败则不再切换（前端会兜底）。"""
+        try:
+            return await self._async_client.chat.completions.create(**kwargs)
+        except Exception as e:
+            if not self._fallback_async_client:
+                raise
+            logger.warning("LLM_FAILOVER(stream): %s -> fallback model=%s err=%s",
+                           kwargs.get("model"), settings.LLM_FALLBACK_MODEL, str(e)[:160])
+            kw = dict(kwargs)
+            kw["model"] = settings.LLM_FALLBACK_MODEL
+            return await self._fallback_async_client.chat.completions.create(**kw)
 
     async def generate(
             self,
@@ -371,7 +431,7 @@ class DeepSeekProvider(LLMProvider):
         try:
             no_think_retry_done = False
             for round_idx in range(max_tool_rounds + 1):
-                response = self._client.chat.completions.create(
+                response = self._create(
                     model=settings.DEEPSEEK_MODEL,
                     messages=messages,
                     stream=False,
@@ -389,7 +449,7 @@ class DeepSeekProvider(LLMProvider):
                         and not no_think_retry_done):
                     no_think_retry_done = True
                     logger.warning("DEEPSEEK_EMPTY_RETRY: 空响应，关闭思考重试")
-                    response = self._client.chat.completions.create(
+                    response = self._create(
                         model=settings.DEEPSEEK_MODEL,
                         messages=messages,
                         stream=False,
@@ -539,7 +599,7 @@ class DeepSeekProvider(LLMProvider):
                     max_tool_rounds = 3
                     tool_messages = list(messages)  # 拷贝，避免污染外层
                     for _round_idx in range(max_tool_rounds + 1):
-                        response = self._client.chat.completions.create(
+                        response = self._create(
                             model=settings.DEEPSEEK_MODEL,
                             messages=tool_messages,
                             stream=False,
@@ -603,7 +663,7 @@ class DeepSeekProvider(LLMProvider):
 
                     logger.warning("STREAM_TOOL_LOOP_EXHAUSTED: max_rounds=%d", max_tool_rounds)
                     # 兜底：超限后用没有 tools 的参数再请求一次
-                    fallback_resp = self._client.chat.completions.create(
+                    fallback_resp = self._create(
                         model=settings.DEEPSEEK_MODEL,
                         messages=tool_messages,
                         stream=False,
@@ -619,7 +679,7 @@ class DeepSeekProvider(LLMProvider):
                     return
 
                 # ── 无 tools：直接流式调用 ──
-                stream = await self._async_client.chat.completions.create(
+                stream = await self._acreate_stream(
                     model=settings.DEEPSEEK_MODEL,
                     messages=messages,
                     stream=True,
@@ -627,6 +687,42 @@ class DeepSeekProvider(LLMProvider):
                     max_tokens=self._max_tokens,
                     **_thinking_kwargs(),
                 )
+
+                # 首字看门狗：主链路排队时会几十秒不吐字，用户看到的就是“卡住”。
+                # 超过 LLM_FIRST_TOKEN_TIMEOUT 还没第一个字，立刻换阿里云重开一路流。
+                first_chunk = None
+                try:
+                    first_chunk = await asyncio.wait_for(
+                        stream.__anext__(), timeout=settings.LLM_FIRST_TOKEN_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    if self._fallback_async_client is None:
+                        raise
+                    logger.warning(
+                        "LLM_STREAM_SLOW: 首字 %.1fs 未到，切备用链路",
+                        settings.LLM_FIRST_TOKEN_TIMEOUT,
+                    )
+                    try:
+                        await stream.close()
+                    except Exception:
+                        pass
+                    stream = await self._fallback_async_client.chat.completions.create(
+                        model=settings.LLM_FALLBACK_MODEL,
+                        messages=messages,
+                        stream=True,
+                        temperature=self._temperature,
+                        max_tokens=self._max_tokens,
+                    )
+                    first_chunk = await stream.__anext__()
+                except StopAsyncIteration:
+                    first_chunk = None
+
+                if first_chunk is not None:
+                    delta = first_chunk.choices[0].delta.content if first_chunk.choices else None
+                    if delta:
+                        full_text.append(delta)
+                        yield delta
+
                 async for chunk in stream:
                     delta = chunk.choices[0].delta.content if chunk.choices else None
                     if delta:
@@ -639,7 +735,7 @@ class DeepSeekProvider(LLMProvider):
                 # 关掉思考补一次非流式生成。
                 if not text.strip():
                     logger.warning("STORY_STREAM_EMPTY: content 为空，关闭思考重试")
-                    retry = await self._async_client.chat.completions.create(
+                    retry = await self._acreate(
                         model=settings.DEEPSEEK_MODEL,
                         messages=messages,
                         stream=False,
@@ -685,12 +781,15 @@ class DeepSeekProvider(LLMProvider):
 
 要求：3 个选项分别对应 ① 直接推进当前使命 ② 代价更大的激进做法 ③ 旁路或自保；不要给纯氛围动作。"""
 
-        # 选项/积分/成就默认走 DeepSeek；仅在显式开启 USE_QWEN_METADATA 且配了
-        # DASHSCOPE_API_KEY 时才优先用 Qwen，失败自动回落 DeepSeek
+        # 选项生成链路：DeepSeek 主 → 阿里云 qwen-plus 备用。
+        # 这条最容易“转圈”，所以给单独的超时（LLM_METADATA_TIMEOUT），
+        # 超时直接换备用，不让用户干等。
         candidate_clients = []
         if settings.USE_QWEN_METADATA and self._qwen_client is not None:
             candidate_clients.append((self._qwen_client, settings.QWEN_METADATA_MODEL))
         candidate_clients.append((self._async_client, settings.DEEPSEEK_MODEL))
+        if self._fallback_async_client is not None:
+            candidate_clients.append((self._fallback_async_client, settings.LLM_FALLBACK_METADATA_MODEL))
 
         for client, model in candidate_clients:
             try:
@@ -703,6 +802,7 @@ class DeepSeekProvider(LLMProvider):
                     stream=False,
                     temperature=0.5,
                     max_tokens=512,
+                    timeout=settings.LLM_METADATA_TIMEOUT,
                     **_thinking_kwargs(),
                 )
                 text = (response.choices[0].message.content or "").strip()
@@ -992,7 +1092,7 @@ class DeepSeekProvider(LLMProvider):
 - note 只写这一步实际发生了什么，不要复述剧情。"""
 
         try:
-            response = self._client.chat.completions.create(
+            response = self._create(
                 model=settings.DEEPSEEK_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 stream=False,
@@ -1033,7 +1133,7 @@ class DeepSeekProvider(LLMProvider):
 要求：每个选项26字以内，简洁有力。只输出一个数组，用于python解析成列表。如: ["选项A", "选项B", "选项C"]，不要其他额外内容。"""
 
         try:
-            response = self._client.chat.completions.create(
+            response = self._create(
                 model=settings.DEEPSEEK_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 stream=False,
