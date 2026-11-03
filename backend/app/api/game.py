@@ -9,14 +9,14 @@ from app.core.config import settings
 from app.services.quota import get_quota_status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from app.core.database import get_db
 from app.api.deps import get_current_user, get_current_active_user
 from app.models.models import User, GameSession, SceneHistory, ChoiceHistory, NovelConfig, TimelineConfig
 from app.schemas.schemas import (
     GameSessionCreate, GameSessionResponse, UserAction,
     Scene, GameStateResponse, GameSessionListItem,
-    CharacterInfoResponse, CharacterEntry, NovelTimelineResponse,
+    CharacterInfoResponse, CharacterEntry, NovelTimelineResponse, RewindRequest,
 )
 from sqlalchemy.orm import selectinload
 from app.services.game_service import GameService, get_provider
@@ -43,6 +43,15 @@ async def _claim_anonymous_session(db: AsyncSession, game_session: GameSession, 
 
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _next_turn_index(db: AsyncSession, session_id: int) -> int:
+    """下一回合序号（0 = 开局，之后每次行动 +1）。"""
+    result = await db.execute(
+        select(func.max(SceneHistory.turn_index)).where(SceneHistory.game_session_id == session_id)
+    )
+    current_max = result.scalar()
+    return 0 if current_max is None else current_max + 1
 
 
 @router.get("/characters")
@@ -171,14 +180,14 @@ async def create_game_session(
     if character.character_type == "preset" and character_info:
         initial_scene = {
             "scene_description": character_info['initial_scene_desc'],
-            "choices": ["开始按原剧情初始发展", "尝试改变剧情走向", "先观察环境", "随缘", "寻找穿越的原因"],
+            "choices": ["开始按原剧情初始发展", "尝试改变剧情走向", "先观察环境"],
             "game_update": {"points_awarded": 0, "new_achievement": f"成为{session_character['name']}"}
         }
         game_session.achievements.append(f"成为{session_character['name']}")
     else:
         initial_scene = {
             "scene_description": f"你穿越到了{character.novel}的{character.timeline}时期，成为了{character.rank}。你需要决定下一步的行动",
-            "choices": ["开始按原剧情初始发展", "尝试改变剧情走向", "先观察环境", "随缘", "寻找穿越的原因"],
+            "choices": ["开始按原剧情初始发展", "尝试改变剧情走向", "先观察环境"],
             "game_update": {"points_awarded": 0, "new_achievement": "穿越开始"}
         }
         game_session.achievements.append("穿越开始")
@@ -193,6 +202,7 @@ async def create_game_session(
     # 保存场景历史
     scene_history = SceneHistory(
         game_session_id=game_session.id,
+        turn_index=0,
         scene_description=initial_scene['scene_description'],
         choices=initial_scene['choices'],
         points_awarded=initial_scene['game_update']['points_awarded'],
@@ -354,18 +364,22 @@ async def perform_action(
     game_session.current_scene = new_scene
 
     # 保存场景历史
+    turn_index = await _next_turn_index(db, game_session.id)
     scene_history = SceneHistory(
         game_session_id=game_session.id,
+        turn_index=turn_index,
         scene_description=new_scene['scene_description'],
         choices=new_scene['choices'],
         points_awarded=new_scene['game_update']['points_awarded'],
-        achievement=new_achievement
+        achievement=new_achievement,
+        scene_image=new_scene.get('scene_image')
     )
     db.add(scene_history)
 
     # 保存选择历史
     choice_history = ChoiceHistory(
         game_session_id=game_session.id,
+        turn_index=turn_index,
         choice=action_data.action,
         points=new_scene['game_update']['points_awarded']
     )
@@ -529,17 +543,21 @@ async def perform_action_stream(
 
         game_session_local.current_scene = new_scene
 
+        turn_index = await _next_turn_index(db, game_session_local.id)
         scene_history = SceneHistory(
             game_session_id=game_session_local.id,
+            turn_index=turn_index,
             scene_description=new_scene["scene_description"],
             choices=new_scene["choices"],
             points_awarded=new_scene["game_update"]["points_awarded"],
             achievement=new_achievement,
+            scene_image=new_scene.get("scene_image"),
         )
         db.add(scene_history)
 
         choice_history = ChoiceHistory(
             game_session_id=game_session_local.id,
+            turn_index=turn_index,
             choice=action_data.action,
             points=new_scene["game_update"]["points_awarded"],
         )
@@ -778,3 +796,147 @@ async def get_session_character(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"角色 '{character_name}' 未找到",
     )
+
+
+# ── 回合回溯 ────────────────────────────────────────────────────────────────
+
+@router.get("/session/{session_id}/turns")
+async def list_turns(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """列出该会话的所有回合，供「回溯」面板选择。"""
+    result = await db.execute(select(GameSession).where(GameSession.id == session_id))
+    game_session = result.scalar_one_or_none()
+    if not game_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="游戏会话不存在")
+
+    await _claim_anonymous_session(db, game_session, current_user)
+    if current_user and game_session.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问此游戏会话")
+
+    scenes = (await db.execute(
+        select(SceneHistory)
+        .where(SceneHistory.game_session_id == session_id)
+        .order_by(SceneHistory.turn_index.asc())
+    )).scalars().all()
+    choices = (await db.execute(
+        select(ChoiceHistory).where(ChoiceHistory.game_session_id == session_id)
+    )).scalars().all()
+    choice_by_turn = {c.turn_index: c.choice for c in choices}
+    latest_turn = scenes[-1].turn_index if scenes else 0
+
+    items = []
+    for sc in scenes:
+        text = (sc.scene_description or "").replace("\n", " ").strip()
+        items.append({
+            "turn_index": sc.turn_index,
+            "preview": text[:70] + ("…" if len(text) > 70 else ""),
+            "choice": choice_by_turn.get(sc.turn_index),
+            "points_awarded": sc.points_awarded or 0,
+            "created_at": sc.created_at.isoformat() if sc.created_at else None,
+            "is_current": sc.turn_index == latest_turn,
+        })
+    return items
+
+
+@router.post("/session/{session_id}/rewind")
+async def rewind_session(
+    session_id: int,
+    payload: RewindRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """回到第 payload.turn_index 回合：之后的回合记录会被删除。
+
+    回溯不调用 LLM，因此不消耗次数。积分按被删回合的加分回退，
+    成就按保留下来的回合重新汇总；摘要/人物状态清空，下次压缩时重建。
+    """
+    result = await db.execute(select(GameSession).where(GameSession.id == session_id))
+    game_session = result.scalar_one_or_none()
+    if not game_session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="游戏会话不存在")
+
+    await _claim_anonymous_session(db, game_session, current_user)
+    if current_user and game_session.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权访问此游戏会话")
+
+    scenes = (await db.execute(
+        select(SceneHistory)
+        .where(SceneHistory.game_session_id == session_id)
+        .order_by(SceneHistory.turn_index.asc())
+    )).scalars().all()
+    if not scenes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="该存档没有回合记录")
+
+    target = payload.turn_index
+    latest = scenes[-1].turn_index
+    if target < 0 or target > latest:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="回合不存在")
+
+    kept = [s for s in scenes if s.turn_index <= target]
+    removed = [s for s in scenes if s.turn_index > target]
+    if not removed:
+        # 已经在目标回合，直接返回当前状态
+        return {
+            "turn_index": target,
+            "removed_turns": 0,
+            "current_scene": game_session.current_scene,
+            "points": game_session.points,
+            "achievements": game_session.achievements or [],
+        }
+
+    last_kept = kept[-1]
+    removed_points = sum((s.points_awarded or 0) for s in removed)
+
+    await db.execute(
+        delete(ChoiceHistory).where(
+            ChoiceHistory.game_session_id == session_id,
+            ChoiceHistory.turn_index > target,
+        )
+    )
+    await db.execute(
+        delete(SceneHistory).where(
+            SceneHistory.game_session_id == session_id,
+            SceneHistory.turn_index > target,
+        )
+    )
+
+    game_session.points = max(0, (game_session.points or 0) - removed_points)
+
+    # 成就按保留下来的回合重新汇总（保持首次出现顺序、去重）
+    rebuilt = []
+    for sc in kept:
+        name = (sc.achievement or "").strip()
+        if name and name not in rebuilt:
+            rebuilt.append(name)
+    game_session.achievements = rebuilt
+
+    game_session.current_scene = {
+        "scene_description": last_kept.scene_description,
+        "choices": last_kept.choices or [],
+        "game_update": {"points_awarded": 0, "new_achievement": ""},
+        "scene_image": last_kept.scene_image,
+    }
+
+    # 摘要与人物状态覆盖了被删除的回合，清空让下次压缩重建
+    game_session.running_summary = None
+    game_session.summary_turn_count = 0
+    game_session.characters_state = None
+
+    await db.commit()
+    await db.refresh(game_session)
+
+    logger.info(
+        "REWIND: session_id=%d target_turn=%d removed=%d points=%d",
+        session_id, target, len(removed), game_session.points,
+    )
+
+    return {
+        "turn_index": target,
+        "removed_turns": len(removed),
+        "current_scene": game_session.current_scene,
+        "points": game_session.points,
+        "achievements": game_session.achievements or [],
+    }

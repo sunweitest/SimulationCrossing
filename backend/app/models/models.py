@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.core.timeutil import now_cn
 from app.core.database import Base
 
 
@@ -13,7 +13,7 @@ class User(Base):
     phone = Column(String, unique=True, index=True, nullable=True)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cn)
 
     # 关系
     game_sessions = relationship("GameSession", back_populates="user", cascade="all, delete-orphan")
@@ -24,7 +24,7 @@ class GameSession(Base):
     __tablename__ = "game_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # 未登录用户为None
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # 未登录用户为None
     session_id = Column(String, unique=True, index=True, nullable=True)  # LLM会话ID
 
     # 角色信息
@@ -49,8 +49,8 @@ class GameSession(Base):
     # 结构化角色追踪
     characters_state = Column(JSON, nullable=True)  # {"characters": [...], "last_updated_turn": N}
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cn)
+    updated_at = Column(DateTime, default=now_cn, onupdate=now_cn)
 
     # 关系
     user = relationship("User", back_populates="game_sessions")
@@ -63,12 +63,14 @@ class SceneHistory(Base):
     __tablename__ = "scene_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False)
+    game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False, index=True)
+    turn_index = Column(Integer, nullable=False, default=0, index=True)  # 第几回合，0=开局
     scene_description = Column(Text, nullable=False)
     choices = Column(JSON)  # 可选择项列表
     points_awarded = Column(Integer, default=0)
     achievement = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    scene_image = Column(String)  # 该回合配图，回滚时用来还原 current_scene
+    created_at = Column(DateTime, default=now_cn)
 
     # 关系
     game_session = relationship("GameSession", back_populates="scenes")
@@ -79,10 +81,11 @@ class ChoiceHistory(Base):
     __tablename__ = "choice_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False)
+    game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False, index=True)
+    turn_index = Column(Integer, nullable=False, default=0, index=True)  # 与 scene_history 同回合对齐
     choice = Column(Text, nullable=False)
     points = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cn)
 
     # 关系
     game_session = relationship("GameSession", back_populates="choices")
@@ -109,7 +112,7 @@ class CharacterTimeline(Base):
     __tablename__ = "character_timelines"
 
     id = Column(Integer, primary_key=True, index=True)
-    character_id = Column(Integer, ForeignKey("preset_characters.id"), nullable=False)
+    character_id = Column(Integer, ForeignKey("preset_characters.id"), nullable=False, index=True)
     timeline = Column(String, nullable=False)
     background = Column(Text)
     initial_scene = Column(Text, nullable=False)
@@ -125,7 +128,7 @@ class NovelConfig(Base):
     name = Column(String, unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cn)
 
     timelines = relationship("TimelineConfig", back_populates="novel", cascade="all, delete-orphan")
 
@@ -135,10 +138,10 @@ class TimelineConfig(Base):
     __tablename__ = "timeline_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    novel_id = Column(Integer, ForeignKey("novel_configs.id"), nullable=False)
+    novel_id = Column(Integer, ForeignKey("novel_configs.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     sort_order = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=now_cn)
 
     novel = relationship("NovelConfig", back_populates="timelines")

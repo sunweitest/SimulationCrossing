@@ -24,6 +24,7 @@
         </span>
         <span class="top-stat">⭐ {{ gameStore.currentSession?.points || 0 }}</span>
         <span class="top-stat">🏅 {{ gameStore.currentSession?.achievements?.length || 0 }}</span>
+        <button class="top-menu-btn" @click="openTurns" title="回到之前的回合">⏪</button>
         <button class="top-menu-btn" @click="showSidebar = !showSidebar" title="菜单">
           ☰
         </button>
@@ -38,7 +39,7 @@
     </div>
 
     <!-- ===== 底部行动栏 ===== -->
-    <div v-if="currentScene" class="bottom-bar">
+    <div v-if="currentScene" class="bottom-bar" ref="bottomBarEl">
       <div class="action-buttons">
         <button
           v-for="(choice, index) in currentScene.choices"
@@ -117,6 +118,49 @@
       </div>
     </Transition>
 
+    <!-- 回合回溯 -->
+    <Transition name="fade">
+      <div v-if="showTurnsPanel" class="quota-modal-mask" @click.self="closeTurns">
+        <div class="quota-modal turns-modal">
+          <h3>⏪ 回到之前的回合</h3>
+          <p class="quota-modal-desc">
+            选一个回合重来，之后的剧情会被丢弃，积分和成就一起回退。<br>
+            <span class="turns-note">回溯不消耗次数</span>
+          </p>
+
+          <div class="turns-list">
+            <button
+              v-for="t in turns"
+              :key="t.turn_index"
+              class="turn-item"
+              :class="{ 'turn-current': t.is_current, 'turn-selected': rewindTarget === t.turn_index }"
+              @click="rewindTarget = t.turn_index"
+            >
+              <div class="turn-head">
+                <span class="turn-no">{{ t.turn_index === 0 ? '🎬 开局' : `第 ${t.turn_index} 回合` }}</span>
+                <span v-if="t.points_awarded" class="turn-points">+{{ t.points_awarded }}</span>
+                <span v-if="t.is_current" class="turn-now">当前</span>
+              </div>
+              <div class="turn-preview">{{ t.preview }}</div>
+              <div v-if="t.choice" class="turn-choice">你当时选了：{{ t.choice }}</div>
+            </button>
+            <p v-if="!turns.length" class="turns-empty">还没有回合记录</p>
+          </div>
+
+          <div class="quota-modal-actions">
+            <button
+              class="btn-copy-qq"
+              :disabled="rewinding || rewindTarget === null || rewindTarget === currentTurn"
+              @click="doRewind"
+            >
+              {{ rewinding ? '回溯中…' : (rewindTarget === currentTurn ? '已经在当前回合' : '回到这一回合') }}
+            </button>
+            <button class="btn-later" @click="closeTurns">取消</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- ===== 侧边栏（滑出） ===== -->
     <Transition name="panel-slide">
       <div v-if="showSidebar" class="sidebar-panel" @click.self="showSidebar = false">
@@ -168,6 +212,9 @@
             <router-link v-if="authStore.isAuthenticated" to="/my-games" class="sidebar-link" @click="showSidebar = false">
               📋 我的游戏
             </router-link>
+            <button @click="showSidebar = false; openTurns()" class="sidebar-link">
+              ⏪ 回到之前的回合
+            </button>
             <button @click="newGame" class="sidebar-link sidebar-link-danger">
               重新开始游戏
             </button>
@@ -187,7 +234,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
@@ -235,6 +282,82 @@ const isAwaitingOptions = ref(false)
 const currentSceneImage = ref(null)
 const streamStatus = ref('AI正在生成剧情...')
 const showSidebar = ref(false)
+
+// ── 回合回溯 ──────────────────────────────────────────────
+const showTurnsPanel = ref(false)
+const turns = ref([])
+const rewindTarget = ref(null)
+const rewinding = ref(false)
+const currentTurn = computed(() => (turns.value.length ? turns.value[turns.value.length - 1].turn_index : null))
+
+const openTurns = async () => {
+  const sid = gameStore.currentSession?.id
+  if (!sid) return
+  rewindTarget.value = null
+  turns.value = []
+  showTurnsPanel.value = true
+  try {
+    const list = await gameAPI.getTurns(sid)
+    turns.value = Array.isArray(list) ? list : []
+  } catch (e) {
+    error.value = '读取回合记录失败，请稍后再试'
+    showTurnsPanel.value = false
+  }
+}
+
+const closeTurns = () => {
+  showTurnsPanel.value = false
+  rewindTarget.value = null
+}
+
+const doRewind = async () => {
+  const sid = gameStore.currentSession?.id
+  if (!sid || rewindTarget.value === null || rewinding.value) return
+  rewinding.value = true
+  try {
+    const res = await gameAPI.rewind(sid, rewindTarget.value)
+    if (gameStore.currentSession) {
+      gameStore.currentSession.current_scene = res.current_scene
+      gameStore.currentSession.points = res.points
+      gameStore.currentSession.achievements = res.achievements
+    }
+    displayedScene.value = res.current_scene?.scene_description || ''
+    currentSceneImage.value = res.current_scene?.scene_image || null
+    showTurnsPanel.value = false
+    showSidebar.value = false
+    const label = res.turn_index === 0 ? '开局' : `第 ${res.turn_index} 回合`
+    achievementToast.value = { text: `已回到${label}，之后的 ${res.removed_turns} 回合已丢弃` }
+    setTimeout(() => { achievementToast.value = null }, 3000)
+  } catch (e) {
+    error.value = e?.response?.data?.detail || '回溯失败，请稍后再试'
+  } finally {
+    rewinding.value = false
+  }
+}
+
+// ── 移动端布局：底部行动栏高度写进 CSS 变量，剧情框不再被遮住 ──
+const bottomBarEl = ref(null)
+let barObserver = null
+const measureBars = () => {
+  const bottom = bottomBarEl.value?.offsetHeight || 0
+  const top = document.querySelector('.top-bar')?.offsetHeight || 0
+  const root = document.documentElement
+  if (bottom) root.style.setProperty('--bottom-bar-h', bottom + 'px')
+  if (top) root.style.setProperty('--top-bar-h', top + 'px')
+}
+watch(() => gameStore.currentSession?.current_scene, async () => {
+  await nextTick()
+  measureBars()
+  if (barObserver) barObserver.disconnect()
+  if (bottomBarEl.value && typeof ResizeObserver !== 'undefined') {
+    barObserver = new ResizeObserver(measureBars)
+    barObserver.observe(bottomBarEl.value)
+  }
+}, { immediate: true })
+
+onBeforeUnmount(() => {
+  if (barObserver) barObserver.disconnect()
+})
 
 // 今日剩余对话次数（右上角显示）
 const quota = ref(null)
@@ -1031,6 +1154,77 @@ const newGame = () => {
   transform: translateX(-50%) translateY(-10px) scale(0.9);
 }
 
+/* ===== 回合回溯面板 ===== */
+.turns-modal {
+  width: min(92vw, 560px);
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
+.turns-list {
+  flex: 1;
+  overflow-y: auto;
+  margin: 4px 0 14px;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-item {
+  text-align: left;
+  background: rgba(255, 215, 150, 0.05);
+  border: 1px solid rgba(255, 215, 150, 0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #e8e2d6;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.turn-item:hover {
+  border-color: rgba(255, 215, 150, 0.42);
+  background: rgba(255, 215, 150, 0.1);
+}
+.turn-selected {
+  border-color: #e0b872;
+  background: rgba(224, 184, 114, 0.16);
+}
+.turn-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #c9a86a;
+  margin-bottom: 4px;
+}
+.turn-points { color: #7fd18b; }
+.turn-now {
+  margin-left: auto;
+  font-size: 0.72rem;
+  border: 1px solid rgba(224, 184, 114, 0.5);
+  border-radius: 999px;
+  padding: 0 8px;
+  color: #e0b872;
+}
+.turn-preview {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: #e8e2d6;
+}
+.turn-choice {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #9a9284;
+}
+.turns-empty {
+  text-align: center;
+  color: #8d8678;
+  font-size: 0.85rem;
+  padding: 18px 0;
+}
+.turns-note { color: #8d8678; font-size: 0.78rem; }
+.quota-modal-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* ===== 响应式 ===== */
 @media (max-aspect-ratio: 4/3) {
   .story-overlay {
@@ -1070,5 +1264,30 @@ const newGame = () => {
     font-size: 0.78rem;
     padding: 5px 12px;
   }
+}
+
+/* ===== 移动端：剧情框夹在顶栏与行动栏之间，最后一行不会被遮住 ===== */
+@media (max-width: 820px) {
+  .story-overlay {
+    top: calc(var(--top-bar-h, 52px) + 8px);
+    bottom: calc(var(--bottom-bar-h, 170px) + 8px);
+    left: 3vw;
+    right: 3vw;
+    transform: none;
+    width: auto;
+    max-width: none;
+    height: auto;
+    max-height: none;
+    padding: 14px 14px;
+  }
+  .story-text {
+    font-size: 0.92rem;
+    line-height: 1.8;
+    letter-spacing: 1px;
+  }
+  .bottom-bar {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .turns-modal { width: 94vw; max-height: 86vh; }
 }
 </style>

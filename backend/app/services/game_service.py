@@ -256,7 +256,7 @@ class GameService:
         scene_stmt = (
             select(SceneHistory)
             .where(SceneHistory.game_session_id == game_session_id)
-            .order_by(SceneHistory.created_at.asc())
+            .order_by(SceneHistory.turn_index.asc())
         )
         scene_result = await db.execute(scene_stmt)
         scenes = scene_result.scalars().all()
@@ -265,7 +265,7 @@ class GameService:
         choice_stmt = (
             select(ChoiceHistory)
             .where(ChoiceHistory.game_session_id == game_session_id)
-            .order_by(ChoiceHistory.created_at.asc())
+            .order_by(ChoiceHistory.turn_index.asc())
         )
         choice_result = await db.execute(choice_stmt)
         choices = choice_result.scalars().all()

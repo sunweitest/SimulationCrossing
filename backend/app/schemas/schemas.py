@@ -84,6 +84,11 @@ class UserAction(BaseModel):
     game_session_id: int
 
 
+class RewindRequest(BaseModel):
+    """回合回溯：回到第 turn_index 回合（之后的回合会被丢弃）"""
+    turn_index: int
+
+
 class GameSessionCreate(BaseModel):
     """创建游戏会话"""
     character: CharacterCreate

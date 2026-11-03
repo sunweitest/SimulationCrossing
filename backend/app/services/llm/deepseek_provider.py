@@ -86,7 +86,7 @@ SYSTEM_PROMPT = """# 角色
 - 积分和成就的设定应合理，真实反映玩家行动的价值与难度。
 
 ### 技能3: 生成新选项
-- 为当前新情境提供 **5个** 清晰、有意义且会导向不同分支的行动选项。
+- 为当前新情境提供 **3个** 清晰、有意义且会导向不同分支的行动选项。
 - 选项之间应体现出不同的策略方向：如进攻 vs 防守、外交 vs 战争、信任 vs 猜疑、保守 vs 冒险。
 - 选项文字简洁有力（10-20字为宜），让玩家一眼就能理解行动方向。
 - 偶尔可以在选项中埋入"隐藏风险"或"意外惊喜"，增加游戏的戏剧性。
@@ -131,7 +131,7 @@ METADATA_SYSTEM_PROMPT = """你是互动小说游戏的规则裁判。
 }
 
 规则：
-- choices 必须有 5 个，每个 10-26 字，导向不同策略分支。
+- choices 必须有 3 个，每个 10-26 字，导向不同策略分支。
 - points_awarded 为 0-15 的整数，有利于玩家利益最大化的行为（1-5分），展现智慧与谋略的行为（3-8分），推动人类文明向前、向善发展的重大举措（8-15分）.
 - 没有明确里程碑时 new_achievement 返回空字符串。
 - 不要重复剧情正文。"""
@@ -174,7 +174,7 @@ WASTELAND_SYSTEM_PROMPT = """# 角色
 - 积分和成就的设定应合理，真实反映玩家行动的价值与难度。
 
 ### 技能3: 生成新选项
-- 为当前新情境提供 **5个** 清晰、有意义且会导向不同分支的行动选项。
+- 为当前新情境提供 **3个** 清晰、有意义且会导向不同分支的行动选项。
 - 选项之间应体现不同策略方向：如冒险搜刮 vs 谨慎防守、交易 vs 劫掠、信任 vs 猜疑、独行 vs 结盟。
 - 选项文字简洁有力（10-20字为宜），让玩家一眼就能理解行动方向。
 - 偶尔可以在选项中埋入"隐藏风险"或"意外惊喜"，增加游戏的戏剧性。
@@ -220,7 +220,7 @@ WASTELAND_METADATA_SYSTEM_PROMPT = """你是废土生存互动小说的规则裁
 }
 
 规则：
-- choices 必须有 5 个，每个 10-26 字，导向不同策略分支。
+- choices 必须有 3 个，每个 10-26 字，导向不同策略分支。
 - points_awarded 为 0-15 的整数，保障生存/获取关键资源的行为（1-5分），展现智慧与策略的布局（3-8分），推动废土秩序重建或拯救文明余烬的重大举措（8-15分）。
 - 没有明确里程碑时 new_achievement 返回空字符串。
 - 不要重复剧情正文。"""
@@ -862,7 +862,7 @@ class DeepSeekProvider(LLMProvider):
         choices = [str(choice).strip() for choice in choices if str(choice).strip()]
         defaults = ["继续观察局势", "主动寻人商议", "暗中收集线索", "果断推进计划", "暂避锋芒待机"]
         for default in defaults:
-            if len(choices) >= 5:
+            if len(choices) >= settings.CHOICE_COUNT:
                 break
             if default not in choices:
                 choices.append(default)
@@ -874,7 +874,7 @@ class DeepSeekProvider(LLMProvider):
         points = max(0, min(points, 15))
 
         return {
-            "choices": choices[:5],
+            "choices": choices[:settings.CHOICE_COUNT],
             "game_update": {
                 "points_awarded": points,
                 "new_achievement": str(game_update.get("new_achievement") or "").strip(),
@@ -886,7 +886,7 @@ class DeepSeekProvider(LLMProvider):
             scene_description: str,
             character_info: Dict,
     ) -> list[str]:
-        """根据场景描述，轻量调用 LLM 生成 5 个行动选项。
+        """根据场景描述，轻量调用 LLM 生成行动选项（数量见 settings.CHOICE_COUNT）。
 
         这是一个简短的独立调用，不需要历史上下文。
         """
@@ -896,7 +896,7 @@ class DeepSeekProvider(LLMProvider):
 {scene_description[:600]}
 
 请根据以上场景，为玩家生成有意义且导向不同分支的行动选项。
-要求：每个选项26字以内，简洁有力。只输出一个数组，用于python解析成列表。如: ["选项A", "选项B", "选项C", "选项D", "选项E"]，不要其他额外内容。"""
+要求：每个选项26字以内，简洁有力。只输出一个数组，用于python解析成列表。如: ["选项A", "选项B", "选项C"]，不要其他额外内容。"""
 
         try:
             response = self._client.chat.completions.create(
@@ -913,17 +913,17 @@ class DeepSeekProvider(LLMProvider):
 
             choices = self._parse_choices(text)
             if isinstance(choices, list) and len(choices) >= 1:
-                # 补齐到 5 个
+                # 补齐到 settings.CHOICE_COUNT 个
                 defaults = ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
-                while len(choices) < 5:
+                while len(choices) < settings.CHOICE_COUNT:
                     for d in defaults:
                         if d not in choices:
                             choices.append(d)
                             break
                 logger.info("CHOICES_GEN_OK: count=%d", len(choices))
-                return choices[:5]
+                return choices[:settings.CHOICE_COUNT]
             else:
                 raise ValueError("Not a valid choices array")
         except Exception as e:
             logger.warning("CHOICES_GEN_FAIL: %s", e)
-            return ["继续探索", "伺机而动", "随机应变", "与人交谈", "静观其变"]
+            return ["继续探索", "伺机而动", "随机应变"][:settings.CHOICE_COUNT]

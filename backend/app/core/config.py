@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     # CORS配置
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:8080"]
 
+    # 每回合生成的行动选项数量（越多选项越长，移动端越挤）
+    CHOICE_COUNT: int = 3
+
     # 次数限制配置
     DAILY_FREE_MESSAGES: int = 5
     DAILY_LOGGED_IN_EXTRA: int = 3
