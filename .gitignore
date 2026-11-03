@@ -37,3 +37,6 @@ CLAUDE.md
 # 计费/定价敏感文件
 计费会员技术方案.html
 兑换码系统技术方案.html
+
+# 脚本生成的图片产物
+scripts/out/
