@@ -343,7 +343,7 @@ async def perform_action(
         if matcher and matcher.is_ready:
             try:
                 new_scene["scene_image"] = await matcher.find_best_match(
-                    new_scene["scene_description"]
+                    new_scene["scene_description"], novel=game_session.novel
                 )
             except Exception as e:
                 logger.warning("ACTION: 图片匹配失败（非致命）: %s", e)
@@ -516,7 +516,11 @@ async def perform_action_stream(
             character_info,
             action_data.action,
         )
-        image_coro = matcher.find_best_match(scene_description) if matcher and matcher.is_ready else None
+        image_coro = (
+            matcher.find_best_match(scene_description, novel=game_session_local.novel)
+            if matcher and matcher.is_ready
+            else None
+        )
 
         if image_coro:
             metadata, scene_image = await asyncio.gather(metadata_coro, image_coro)

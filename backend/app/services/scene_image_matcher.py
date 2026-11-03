@@ -44,6 +44,8 @@ class SceneImageMatcher:
         self._client: Optional[OpenAI] = None
         self._entries: List[dict] = []  # [{"file": "xxx.png", "url": "/images/scene/xxx.png", "vector": np.array}, ...]
         self._matrix: Optional[np.ndarray] = None  # (N, 1024) L2-normalized
+        self._tags: List[List[str]] = []            # 与 entries 对齐的世界标签
+        self._mask_cache: dict = {}
         self._ready = False
 
     @property
@@ -168,6 +170,42 @@ class SceneImageMatcher:
         norms[norms == 0] = 1.0
         self._matrix = m / norms
 
+    # ── 世界标签（公共图库 / 专属图库） ──────────────────
+
+    def _load_tags(self) -> None:
+        """读取 content/scene_images.json，给每张图打上可用世界。
+
+        没有清单时所有图都算「通用」——行为与以前一致。
+        """
+        manifest = Path(__file__).resolve().parents[3] / "content" / "scene_images.json"
+        tags_map: dict = {}
+        if manifest.exists():
+            try:
+                tags_map = json.loads(manifest.read_text(encoding="utf-8"))
+            except Exception as e:  # noqa: BLE001
+                logger.warning("TAGS: 读取 %s 失败: %s", manifest, e)
+
+        self._tags = []
+        for e in self._entries:
+            stem = Path(e["file"]).stem
+            self._tags.append(tags_map.get(stem, ["通用"]))
+        self._mask_cache = {}
+        if tags_map:
+            specific = sum(1 for t in self._tags if t != ["通用"])
+            logger.info("TAGS: %d 张图，其中 %d 张为世界专属", len(self._tags), specific)
+
+    def _allowed_mask(self, novel: str):
+        """该世界可以用的图片：通用 + 本世界专属；没有标签时返回 None"""
+        if not self._tags or not novel:
+            return None
+        if novel in self._mask_cache:
+            return self._mask_cache[novel]
+        mask = np.array(
+            [("通用" in t) or (novel in t) for t in self._tags], dtype=bool
+        )
+        self._mask_cache[novel] = mask
+        return mask
+
     # ── 启动预热 ──────────────────────────────────────────
 
     async def warmup(self) -> None:
@@ -183,6 +221,7 @@ class SceneImageMatcher:
 
         # 尝试从缓存加载
         if self._load_cache():
+            self._load_tags()
             logger.info(
                 "WARMUP: 缓存命中 %d 张图片 (%.1fs)", len(self._entries), time.time() - t0
             )
@@ -208,6 +247,7 @@ class SceneImageMatcher:
             for p, v in zip(png_files, vectors)
         ]
         self._build_matrix()
+        self._load_tags()
         self._ready = True
         self._save_cache()
 
@@ -218,10 +258,11 @@ class SceneImageMatcher:
 
     # ── 运行时匹配 ────────────────────────────────────────
 
-    async def find_best_match(self, story_text: str) -> Optional[str]:
+    async def find_best_match(self, story_text: str, novel: Optional[str] = None) -> Optional[str]:
         """传入剧情文本，返回最佳匹配的图片 URL，或 None
 
         流程：截取前 500 字 → embedding → 点积相似度 → 阈值判断
+        novel 给出时先在该世界可用的图（通用 + 专属）里挑，挑不到再退回全库。
         """
         if not self._ready:
             return None
@@ -262,6 +303,15 @@ class SceneImageMatcher:
         scores = self._matrix @ query_vec
         best_idx = int(np.argmax(scores))
         best_score = float(scores[best_idx])
+
+        # 世界优先：有专属图时先在本世界的候选里挑，避免「仙侠剧情配园林图」这类串味
+        mask = self._allowed_mask(novel) if novel else None
+        if mask is not None and mask.any():
+            masked = np.where(mask, scores, -1.0)
+            idx = int(np.argmax(masked))
+            score = float(masked[idx])
+            if score >= _MATCH_THRESHOLD:
+                best_idx, best_score = idx, score
 
         logger.info(
             "MATCH: best_idx=%d score=%.3f file=%s query=%.40s",
