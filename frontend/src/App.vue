@@ -16,17 +16,25 @@
     <main class="app-main">
       <router-view />
     </main>
+
+    <SiteFooter v-if="showFooter" />
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useGameStore } from '@/stores/game'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
+import SiteFooter from '@/components/SiteFooter.vue'
 
 const authStore = useAuthStore()
 const gameStore = useGameStore()
 const router = useRouter()
+const route = useRoute()
+
+// 游戏页是全屏沉浸式，不显示页脚
+const showFooter = computed(() => route.name !== 'Game')
 
 const handleLogout = () => {
   authStore.logout()

@@ -42,6 +42,24 @@ const routes = [
     path: '/admin',
     name: 'Admin',
     component: () => import('@/views/AdminView.vue')
+  },
+  {
+    path: '/privacy',
+    name: 'Privacy',
+    component: () => import('@/views/LegalView.vue'),
+    meta: { doc: 'privacy' }
+  },
+  {
+    path: '/terms',
+    name: 'Terms',
+    component: () => import('@/views/LegalView.vue'),
+    meta: { doc: 'terms' }
+  },
+  {
+    path: '/refund',
+    name: 'Refund',
+    component: () => import('@/views/LegalView.vue'),
+    meta: { doc: 'refund' }
   }
 ]
 
