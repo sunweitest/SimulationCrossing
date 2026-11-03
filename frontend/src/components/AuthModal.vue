@@ -97,9 +97,20 @@
               />
             </div>
 
+            <div class="agree-row">
+              <label class="agree-label">
+                <input type="checkbox" v-model="agree" />
+                <span>
+                  我已阅读并同意
+                  <a href="/terms" target="_blank" rel="noopener">《服务条款》</a>和
+                  <a href="/privacy" target="_blank" rel="noopener">《隐私政策》</a>
+                </span>
+              </label>
+            </div>
+
             <div v-if="error" class="error-message">{{ error }}</div>
 
-            <button type="submit" class="btn btn-primary btn-block" :disabled="loading">
+            <button type="submit" class="btn btn-primary btn-block" :disabled="loading || !agree">
               {{ loading ? '注册中...' : '注册' }}
             </button>
           </form>
@@ -144,6 +155,9 @@ const registerForm = reactive({
   password: '',
   confirmPassword: ''
 })
+
+// 必须勾选同意《服务条款》《隐私政策》才能注册
+const agree = ref(false)
 
 const close = () => {
   emit('update:visible', false)
@@ -216,6 +230,11 @@ const handleRegister = async () => {
     return
   }
 
+  if (!agree.value) {
+    error.value = '请先阅读并同意《服务条款》和《隐私政策》'
+    return
+  }
+
   loading.value = true
   error.value = ''
 
@@ -223,7 +242,8 @@ const handleRegister = async () => {
     await authStore.register({
       email: registerForm.email || null,
       phone: registerForm.phone || null,
-      password: registerForm.password
+      password: registerForm.password,
+      agree_terms: true
     })
     close()
   } catch (err) {
@@ -235,6 +255,31 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
+/* 同意条款勾选 */
+.agree-row { margin: 4px 0 14px; }
+.agree-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-light, #666);
+  cursor: pointer;
+}
+.agree-label input[type="checkbox"] {
+  margin-top: 3px;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  accent-color: var(--accent-color, #d4af37);
+  cursor: pointer;
+}
+.agree-label a {
+  color: var(--secondary-color, #8b7355);
+  text-decoration: underline;
+}
+.agree-label a:hover { color: var(--accent-color, #d4af37); }
+
 /* 遮罩层 */
 .modal-backdrop {
   position: fixed;

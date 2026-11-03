@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.models.models import User
+from app.core.timeutil import now_cn
 from app.schemas.schemas import UserCreate, UserLogin, Token, UserResponse
 from datetime import timedelta
 from app.core.config import settings
@@ -14,6 +15,13 @@ router = APIRouter(prefix="/api/auth", tags=["认证"])
 @router.post("/register", response_model=Token)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     """用户注册"""
+    # 必须先同意条款（前端勾选框 + 后端校验，留痕时间用于合规举证）
+    if not user_data.agree_terms:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请先阅读并同意《服务条款》和《隐私政策》"
+        )
+
     # 验证至少提供了邮箱或手机号
     if not user_data.email and not user_data.phone:
         raise HTTPException(
@@ -43,7 +51,8 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     new_user = User(
         email=user_data.email,
         phone=user_data.phone,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        terms_accepted_at=now_cn()
     )
     db.add(new_user)
     await db.commit()

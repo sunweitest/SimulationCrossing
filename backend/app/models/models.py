@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from app.core.timeutil import now_cn
 from app.core.database import Base
@@ -13,6 +13,8 @@ class User(Base):
     phone = Column(String, unique=True, index=True, nullable=True)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
+    # 注册时勾选同意《服务条款》《隐私政策》的时间（合规留痕）
+    terms_accepted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=now_cn)
 
     # 关系
@@ -61,10 +63,13 @@ class GameSession(Base):
 class SceneHistory(Base):
     """场景历史表"""
     __tablename__ = "scene_history"
+    __table_args__ = (
+        Index("ix_scene_history_session_turn", "game_session_id", "turn_index"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False, index=True)
-    turn_index = Column(Integer, nullable=False, default=0, index=True)  # 第几回合，0=开局
+    turn_index = Column(Integer, nullable=False, default=0)  # 第几回合，0=开局
     scene_description = Column(Text, nullable=False)
     choices = Column(JSON)  # 可选择项列表
     points_awarded = Column(Integer, default=0)
@@ -82,7 +87,7 @@ class ChoiceHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     game_session_id = Column(Integer, ForeignKey("game_sessions.id"), nullable=False, index=True)
-    turn_index = Column(Integer, nullable=False, default=0, index=True)  # 与 scene_history 同回合对齐
+    turn_index = Column(Integer, nullable=False, default=0)  # 与 scene_history 同回合对齐
     choice = Column(Text, nullable=False)
     points = Column(Integer, default=0)
     created_at = Column(DateTime, default=now_cn)

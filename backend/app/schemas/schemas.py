@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     email: Optional[EmailStr] = None
     phone: Optional[str] = None
     password: str = Field(..., min_length=6)
+    # 必须勾选同意《服务条款》《隐私政策》才能注册
+    agree_terms: bool = False
 
 
 class UserLogin(BaseModel):
