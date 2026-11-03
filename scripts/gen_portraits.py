@@ -7,7 +7,7 @@
     /opt/venv/bin/python scripts/gen_portraits.py --worlds 红楼梦 --install   # 写 webp + 回填 JSON
 
 产物：
-    scripts/out/portraits/<世界>/<角色>.png       原图（1140×1472，3:4）
+    ~/.cache/simcrossing/portraits/<世界>/<角色>.png   原图（1140×1472，3:4）
     frontend/public/images/characters/<世界>/<角色>.webp   400×516 网页用
     content/worlds/<世界>.json 里写入 "image": "/images/characters/...webp"
 
@@ -31,7 +31,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 WORLDS_DIR = REPO / "content" / "worlds"
-OUT_DIR = REPO / "scripts" / "out" / "portraits"
+# 输出放在仓库外：仓库目录会被 chown 给 www-data，脚本就写不进去了
+OUT_DIR = Path.home() / ".cache" / "simcrossing" / "portraits"
 PUBLIC_DIR = REPO / "frontend" / "public" / "images" / "characters"
 
 MODEL = os.environ.get("QWEN_IMAGE_MODEL", "qwen-image-3.0")
