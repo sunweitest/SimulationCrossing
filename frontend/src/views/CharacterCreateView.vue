@@ -104,6 +104,20 @@
               共 {{ worldCharacters.length }} 个角色 · 带「小人物」标记的往往更难，也更像我们自己的日子
             </p>
 
+            <div v-if="authStore.isAuthenticated && myCharacters.length" class="my-chars">
+              <p class="my-chars-title">我的角色 · 只有你能看见</p>
+              <div class="my-chars-row">
+                <div v-for="mc in myCharacters" :key="mc.id" class="my-char">
+                  <button class="my-char-main" @click="selectMyCharacter(mc)">
+                    <strong>{{ mc.name }}</strong>
+                    <span>{{ mc.rank || '未知' }} · {{ mc.age }}岁</span>
+                  </button>
+                  <button class="my-char-act" title="修改" @click.stop="editMyCharacter(mc)">✎</button>
+                  <button class="my-char-act danger" title="删除" @click.stop="deleteMyCharacter(mc)">✕</button>
+                </div>
+              </div>
+            </div>
+
             <div v-if="charLoading" class="char-loading">
               <div class="spinner"></div>
               <span>正在唤醒这个世界的人…</span>
@@ -298,7 +312,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
-import { gameAPI, communityAPI } from '@/api'
+import { gameAPI, communityAPI, customCharacterAPI } from '@/api'
 import AuthModal from '@/components/AuthModal.vue'
 import sanguoImage from '../../../images/sanguo.png'
 import shuihuImage from '../../../images/shuihu.png'
@@ -334,6 +348,8 @@ const selectedChar = ref(null)    // 选中的角色对象；自定义时为 { c
 const voteCandidates = ref([])
 const voteTotal = ref(0)
 const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
+const myCharacters = ref([])        // 当前世界里我自己的自定义角色
+const editingCustomId = ref(null)   // 正在修改的自定义角色 id（null = 新建）
 
 const form = ref({
   novel: '三国演义',
@@ -517,7 +533,10 @@ const selectWorld = (novel) => {
   }
   hoverNovel.value = ''
   step.value = 'character'
-  if (!selectedChar.value) loadWorldCharacters()
+  if (!selectedChar.value) {
+    loadWorldCharacters()
+    loadMyCharacters()
+  }
   // 埋点失败不影响进入游戏
   communityAPI.trackWorldClick(novel).catch(() => {})
 }
@@ -548,7 +567,53 @@ const chooseCharacter = (c) => {
   form.value.timeline = c.timelines?.[0]?.name || timelines.value[0] || ''
 }
 
+const loadMyCharacters = async () => {
+  if (!authStore.isAuthenticated) {
+    myCharacters.value = []
+    return
+  }
+  try {
+    const rows = await customCharacterAPI.list(form.value.novel)
+    myCharacters.value = Array.isArray(rows) ? rows : []
+  } catch (e) {
+    myCharacters.value = []
+  }
+}
+
+const fillCustomForm = (mc) => {
+  form.value.name = mc.name || ''
+  form.value.gender = mc.gender || '女性'
+  form.value.age = mc.age || 20
+  form.value.rank = mc.rank || '未知'
+  form.value.background = mc.background || ''
+}
+
+const selectMyCharacter = (mc) => {
+  editingCustomId.value = mc.id
+  characterType.value = 'custom'
+  selectedChar.value = { custom: true, name: mc.name, timelines: [] }
+  fillCustomForm(mc)
+  if (!form.value.timeline) form.value.timeline = timelines.value[0] || ''
+  step.value = 'time'
+}
+
+const editMyCharacter = (mc) => {
+  selectMyCharacter(mc)
+}
+
+const deleteMyCharacter = async (mc) => {
+  if (!confirm(`删除自定义角色「${mc.name}」？这个操作不会影响已开始的存档。`)) return
+  try {
+    await customCharacterAPI.remove(mc.id)
+    myCharacters.value = myCharacters.value.filter((x) => x.id !== mc.id)
+    if (editingCustomId.value === mc.id) editingCustomId.value = null
+  } catch (e) {
+    error.value = '删除失败，请稍后再试'
+  }
+}
+
 const chooseCustom = () => {
+  editingCustomId.value = null
   selectedChar.value = { custom: true, name: '', timelines: [] }
   characterType.value = 'custom'
   form.value.name = ''
@@ -637,7 +702,10 @@ onMounted(async () => {
   loadVotes()
 
   // 选世界阶段暂不预加载角色，进入角色页时再拉
-  if (step.value === 'character') await loadWorldCharacters()
+  if (step.value === 'character') {
+    await loadWorldCharacters()
+    await loadMyCharacters()
+  }
 })
 
 const onPresetCharacterChange = async () => {
@@ -722,6 +790,29 @@ const startGame = async () => {
       timeline: form.value.timeline,
       character_type: characterType.value,
       starting_points: characterSource.starting_points
+    }
+
+    // 自定义角色：登录用户自动存进「我的角色」，别人看不见
+    if (characterType.value === 'custom' && authStore.isAuthenticated) {
+      const payload = {
+        novel: form.value.novel,
+        name: characterData.name,
+        gender: characterData.gender,
+        age: characterData.age,
+        rank: characterData.rank,
+        background: characterData.background,
+      }
+      try {
+        if (editingCustomId.value) {
+          await customCharacterAPI.update(editingCustomId.value, payload)
+        } else {
+          const saved = await customCharacterAPI.create(payload)
+          editingCustomId.value = saved?.id || null
+        }
+      } catch (e) {
+        // 存角色失败不该挡住开局
+        console.warn('保存自定义角色失败', e)
+      }
     }
 
     const session = await gameStore.createGameSession(characterData)
@@ -1356,6 +1447,48 @@ textarea.input {
   padding-right: 4px;
   margin-bottom: 0.5rem;
 }
+
+/* ===== 我的角色（私有） ===== */
+.my-chars { margin: 0 0 18px; }
+.my-chars-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: rgba(214, 178, 108, 0.85);
+}
+.my-chars-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.my-char {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgba(214, 178, 108, 0.28);
+  border-radius: 10px;
+  background: rgba(214, 178, 108, 0.08);
+  overflow: hidden;
+}
+.my-char-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.my-char-main strong { font-size: 13.5px; color: #efe2c6; }
+.my-char-main span { font-size: 11px; color: rgba(240, 230, 211, 0.55); }
+.my-char-act {
+  width: 30px;
+  border: none;
+  border-left: 1px solid rgba(214, 178, 108, 0.18);
+  background: transparent;
+  color: rgba(240, 230, 211, 0.6);
+  cursor: pointer;
+  font-size: 12px;
+}
+.my-char-act:hover { background: rgba(255, 255, 255, 0.08); color: #f0e6d3; }
+.my-char-act.danger:hover { background: rgba(200, 80, 80, 0.22); color: #ffd7d7; }
 
 .char-card {
   position: relative;

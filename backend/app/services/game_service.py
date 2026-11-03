@@ -233,6 +233,32 @@ class GameService:
     # ── 使命推进 ──────────────────────────────────────────
 
     @staticmethod
+    async def generate_custom_mission(character_info: Dict) -> Dict:
+        """自定义角色：按背景让 LLM 现拟一条使命，失败则给一条保守的通用使命。"""
+        provider = get_provider()
+        mission = None
+        if hasattr(provider, "generate_mission"):
+            try:
+                mission = await provider.generate_mission(character_info)
+            except Exception as e:
+                logger.warning("CUSTOM_MISSION_FAIL: %s", e)
+        if mission:
+            logger.info("CUSTOM_MISSION_OK: %s → %s", character_info.get("name"), mission.get("title"))
+            return mission
+
+        return {
+            "title": "先活过这十二天",
+            "goal": "在一个不属于你的时代里站稳脚跟，先活下去，再谈别的",
+            "stages": [
+                {"name": "找到一个落脚处", "detail": "有屋顶、有水，最好还有个人愿意搭话"},
+                {"name": "换到第一份活命的东西", "detail": "靠手艺、力气或嘴皮子换"},
+                {"name": "让一个人记住你的名字", "detail": "这人以后可能救你，也可能卖你"},
+            ],
+            "deadline_turns": 12,
+            "stakes": "站不稳，这个时代的第一次冬天就会把你筛掉",
+        }
+
+    @staticmethod
     def init_mission_state(mission: Optional[Dict]) -> Optional[Dict]:
         """开局：把角色使命定义变成一份可推进的进度状态。"""
         if not isinstance(mission, dict) or not mission.get("stages"):
@@ -311,12 +337,73 @@ class GameService:
             ms["status"] = "failed"
             result["achievements"].append(f"使命未竟：{mission.get('title', '')}")
 
+        # 死亡优先级最高：一旦判定死亡，这一局立即结束，不再推进阶段
+        if bool(upd.get("character_dead")):
+            ms["status"] = "dead"
+            result["achievements"].append(f"终局：{mission.get('title', '')}")
+
         ms["last_label"] = "推进" if (advance or stage_done) else ("恶化" if setback else "停滞")
-        ms["last_note"] = note
+        if ms.get("status") == "dead":
+            ms["last_label"] = "终局"
+            ms["last_note"] = note or "主角死了，这一局结束"
+        else:
+            ms["last_note"] = note
 
         session.mission_state = ms  # 复制后整体赋值，确保被判定为脏数据
         result["mission"] = GameService.mission_public(session)
         return result
+
+    @staticmethod
+    def enter_second_act(session) -> bool:
+        """使命失败后的下一回合：切到第二幕。
+
+        不改写原来的失败记录，只补一条“活下去”的新阶段线，让故事有下一步可走。
+        返回 True 表示本回合已经是第二幕。
+        """
+        stored = session.mission_state
+        if not isinstance(stored, dict) or not isinstance(stored.get("mission"), dict):
+            return False
+        if stored.get("status") != "failed" or int(stored.get("act") or 1) >= 2:
+            return False
+
+        ms = dict(stored)
+        ms["log"] = list(ms.get("log") or [])
+        mission = dict(ms["mission"])
+        failed_title = str(mission.get("title", ""))
+        while failed_title.startswith("第二幕·"):
+            failed_title = failed_title[len("第二幕·"):]
+        failed_title = failed_title.rstrip("…")
+        mission["title"] = f"第二幕·{(failed_title[:10] + '…') if len(failed_title) > 10 else failed_title}"
+        mission["goal"] = "使命已经失败，代价落地了。你现在只想活下来，并拿回一样东西。"
+        mission["stages"] = [
+            {"name": "从失败的现场脱身", "detail": "先离开这个已经不属于你的地方"},
+            {"name": "找到一个还愿意收留你的人或据点", "detail": "代价是要替对方做一件事"},
+            {"name": "拿回一样能让你翻身的东西", "detail": "或彻底放弃它，换一条活路"},
+        ]
+        mission["deadline_turns"] = 10
+        mission["stakes"] = "上一幕输掉的东西，这一幕要么拿回来，要么认了"
+
+        ms["mission"] = mission
+        ms["act"] = 2
+        ms["stage_index"] = 0
+        ms["stage_progress"] = 0
+        ms["deadline_turns"] = 10
+        ms["days_left"] = 10
+        ms["turns_used"] = 0
+        ms["penalty"] = 0
+        ms["status"] = "active"
+        ms["last_label"] = ""
+        ms["last_note"] = "使命失败，进入第二幕"
+        ms["log"].append({"turn": 0, "stage": "第二幕开启", "note": failed_title})
+
+        session.mission_state = ms
+        return True
+
+    @staticmethod
+    def is_ended(session) -> bool:
+        """这一局是否已经结束（主角死亡）。"""
+        ms = session.mission_state
+        return isinstance(ms, dict) and ms.get("status") == "dead"
 
     @staticmethod
     def mission_public(session) -> Optional[Dict]:
@@ -338,6 +425,8 @@ class GameService:
             "days_left": int(ms.get("days_left") or 0),
             "deadline_turns": int(ms.get("deadline_turns") or 0),
             "status": ms.get("status", "active"),
+            "act": int(ms.get("act") or 1),
+            "ended": ms.get("status") == "dead",
             "last_label": ms.get("last_label", ""),
             "last_note": ms.get("last_note", ""),
         }

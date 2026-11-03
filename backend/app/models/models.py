@@ -186,3 +186,21 @@ class WorldVote(Base):
     __table_args__ = (
         UniqueConstraint("voter_key", "world_name", name="uq_world_votes_voter_world"),
     )
+
+
+class CustomCharacter(Base):
+    """玩家自定义角色：只有创建者本人可见，可改可删。"""
+    __tablename__ = "custom_characters"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    novel = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False)
+    gender = Column(String)
+    age = Column(Integer)
+    rank = Column(String)
+    background = Column(Text)
+    created_at = Column(DateTime, default=now_cn)
+    updated_at = Column(DateTime, default=now_cn, onupdate=now_cn)
+
+    user = relationship("User")

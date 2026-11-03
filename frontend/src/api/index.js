@@ -55,6 +55,14 @@ export const gameAPI = {
   getNovels: () => api.get('/game/novels'),
 }
 
+// 自定义角色（私有，只有自己能看见）
+export const customCharacterAPI = {
+  list: (novel) => api.get('/custom-characters', { params: novel ? { novel } : {} }),
+  create: (data) => api.post('/custom-characters', data),
+  update: (id, data) => api.put(`/custom-characters/${id}`, data),
+  remove: (id) => api.delete(`/custom-characters/${id}`),
+}
+
 // 社区 API：世界角色、点击埋点、投票、天梯
 export const communityAPI = {
   getWorldCharacters: (novel) => api.get(`/community/world/${encodeURIComponent(novel)}/characters`),

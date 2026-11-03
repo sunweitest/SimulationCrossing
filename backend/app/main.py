@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import close_db, init_db
-from app.api import auth, game, admin, community
+from app.api import auth, game, admin, community, custom_characters
 from app.middleware.rate_limit import RateLimitMiddleware
 from contextlib import asynccontextmanager
 
@@ -81,6 +81,7 @@ app.include_router(auth.router)
 app.include_router(game.router)
 app.include_router(admin.router)
 app.include_router(community.router)
+app.include_router(custom_characters.router)
 
 
 @app.get("/")

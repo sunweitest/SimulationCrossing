@@ -39,6 +39,7 @@
       @click="missionOpen = !missionOpen"
     >
       <span class="mb-mark">◎</span>
+      <span v-if="mission.act >= 2" class="mb-chip mb-act">第二幕</span>
       <span class="mb-title">{{ mission.title }}</span>
       <span v-if="mission.status === 'done'" class="mb-chip mb-chip-done">使命达成</span>
       <span v-else-if="mission.status === 'failed'" class="mb-chip mb-chip-failed">使命未竟</span>
@@ -71,8 +72,26 @@
       </div>
     </div>
 
+    <!-- ===== 终局面板 ===== -->
+    <div v-if="mission?.ended" class="ending-mask">
+      <div class="ending-card">
+        <p class="ending-kicker">— 终局 —</p>
+        <h2 class="ending-title">{{ gameStore.currentSession?.character_name }} 死了</h2>
+        <p class="ending-line">{{ endingLine }}</p>
+        <div class="ending-stats">
+          <div><span class="es-num">{{ gameStore.currentSession?.points || 0 }}</span><span class="es-label">积分</span></div>
+          <div><span class="es-num">{{ gameStore.currentSession?.achievements?.length || 0 }}</span><span class="es-label">成就</span></div>
+        </div>
+        <div class="ending-actions">
+          <button class="ending-btn primary" @click="restartSameCharacter">用同一个角色重开</button>
+          <button class="ending-btn" @click="backToHome">回到主界面</button>
+        </div>
+        <p class="ending-hint">这一局已经存档，可在「我的游戏」里回看</p>
+      </div>
+    </div>
+
     <!-- ===== 底部行动栏 ===== -->
-    <div v-if="currentScene" class="bottom-bar" ref="bottomBarEl">
+    <div v-if="currentScene && !mission?.ended" class="bottom-bar" ref="bottomBarEl">
       <div class="action-buttons">
         <button
           v-for="(choice, index) in currentScene.choices"
@@ -436,13 +455,10 @@ const currentScene = computed(() => gameStore.currentSession?.current_scene)
 const missionOpen = ref(false)
 
 // 使命视图：优先用本回合返回的 public 视图，刷新页面时从 session.mission_state 还原
-const mission = computed(() => {
-  const fromScene = currentScene.value?.mission
-  if (fromScene) return fromScene
-  const ms = gameStore.currentSession?.mission_state
+const deriveMission = (ms) => {
   if (!ms || !ms.mission) return null
   const m = ms.mission
-  const stages = (m.stages || []).map((s) => s.name || '')
+  const stages = (m.stages || []).map((st) => st.name || '')
   const idx = ms.stage_index || 0
   return {
     title: m.title || '',
@@ -455,9 +471,18 @@ const mission = computed(() => {
     days_left: ms.days_left ?? ms.deadline_turns ?? 0,
     deadline_turns: ms.deadline_turns || 0,
     status: ms.status || 'active',
+    act: ms.act || 1,
+    ended: ms.status === 'dead',
     last_label: ms.last_label || '',
     last_note: ms.last_note || '',
   }
+}
+
+const mission = computed(() => {
+  const ms = gameStore.currentSession?.mission_state
+  // 死亡是终局状态：以会话状态为准，别被上一回合的 scene 快照盖回去
+  if (ms && ms.status === 'dead') return deriveMission(ms)
+  return currentScene.value?.mission || deriveMission(ms)
 })
 
 const worldImageMap = {
@@ -602,6 +627,15 @@ const performAction = async (action) => {
         needsLogin.value = false
         showQuotaModal.value = true
       }
+    } else if (err.response?.status === 409 && err.response?.data?.detail?.ended) {
+      // 主角已死：不弹错误，直接把终局面板显示出来
+      if (gameStore.currentSession?.mission_state) {
+        gameStore.currentSession.mission_state = {
+          ...gameStore.currentSession.mission_state,
+          status: 'dead',
+        }
+      }
+      error.value = ''
     } else {
       const detail = err.response?.data?.detail
       error.value = typeof detail === 'string' ? detail : detail?.message || err.message || '执行行动失败'
@@ -623,6 +657,23 @@ const performCustomAction = () => {
 }
 
 // 回到主界面：进度本来就已存库，这里只离开对局，不弹确认、不清会话
+const endingLine = computed(() => {
+  const note = mission.value?.last_note
+  return note && note.length > 4 ? note : '你倒在了这条路上。故事到这里为止。'
+})
+
+const restartSameCharacter = () => {
+  const s = gameStore.currentSession
+  if (!s) {
+    router.push('/character-create')
+    return
+  }
+  router.push({
+    path: '/character-create',
+    query: { novel: s.novel, name: s.character_name, timeline: s.timeline },
+  })
+}
+
 const goMyGames = () => {
   router.push(authStore.isAuthenticated ? '/my-games' : { path: '/login', query: { redirect: route.fullPath } })
 }
@@ -1385,6 +1436,42 @@ const backToHome = () => {
     top: calc(50% + 20px);
   }
 }
+
+/* ===== 终局面板 ===== */
+.ending-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(20, 12, 10, 0.72), rgba(6, 5, 5, 0.94));
+  backdrop-filter: blur(3px);
+}
+.ending-card {
+  width: min(440px, 88vw);
+  padding: 34px 30px 26px;
+  border-radius: 18px;
+  border: 1px solid rgba(214, 178, 108, 0.26);
+  background: rgba(16, 13, 12, 0.9);
+  color: #e8dfcc;
+  text-align: center;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.ending-kicker { margin: 0 0 10px; font-size: 12px; letter-spacing: 6px; color: #8d7f6c; }
+.ending-title { margin: 0 0 14px; font-size: 21px; font-weight: 600; color: #f1e3c8; }
+.ending-line { margin: 0 0 20px; font-size: 13.5px; line-height: 1.8; color: #b8ac97; }
+.ending-stats { display: flex; justify-content: center; gap: 40px; margin-bottom: 22px; }
+.ending-stats div { display: flex; flex-direction: column; gap: 4px; }
+.es-num { font-size: 22px; color: #d6b26c; }
+.es-label { font-size: 11px; color: #857a68; letter-spacing: 1px; }
+.ending-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.ending-btn {
+  padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2); background: transparent; color: #d8cebd; font-size: 13px;
+}
+.ending-btn.primary { background: rgba(214, 178, 108, 0.18); border-color: rgba(214, 178, 108, 0.6); color: #f3e5c6; }
+.ending-hint { margin: 16px 0 0; font-size: 11.5px; color: #6f6657; }
 
 /* ===== 加载失败 ===== */
 .load-failed-text {

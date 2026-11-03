@@ -109,7 +109,11 @@ async def export_worlds(out_dir: Path) -> None:
                         "background": ch.background or "",
                         "image": ch.image or "",
                         "timelines": {
-                            l.timeline: {"background": l.background or "", "initial_scene": l.initial_scene}
+                            l.timeline: {
+                                "background": l.background or "",
+                                "initial_scene": l.initial_scene,
+                                **({"mission": l.mission} if l.mission else {}),
+                            }
                             for l in links
                         },
                     }
@@ -216,11 +220,14 @@ async def import_world(path: Path, dry_run: bool = False, prune: bool = False) -
                             timeline=tl_name,
                             background=detail.get("background", ""),
                             initial_scene=detail["initial_scene"],
+                            mission=detail.get("mission"),
                         )
                     )
                 else:
                     lk.background = detail.get("background", lk.background)
                     lk.initial_scene = detail.get("initial_scene", lk.initial_scene)
+                    if "mission" in detail:
+                        lk.mission = detail["mission"]
                 stats["links"] += 1
 
             if prune:

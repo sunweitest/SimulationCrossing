@@ -935,6 +935,7 @@ class DeepSeekProvider(LLMProvider):
                 lines.append(f"- 三个阶段都已走完，只剩收尾")
         if days_left is not None:
             lines.append(f"- 剩余时间：{days_left} 个回合")
+        act = int(ms.get("act") or 1)
         if status == "failed":
             lines.append("- 状态：期限已过，使命失败——但故事没结束，你要面对后果")
 
@@ -945,7 +946,17 @@ class DeepSeekProvider(LLMProvider):
             "2. 可以失败，可以转向，但玩家要能感觉到代价：失去时间、盟友、掩护、信誉其中之一。",
             "3. 剧情里要有一点具体的压力（期限、追兵、被怀疑、资源见底），不要只是氛围描写。",
             "4. 不要替玩家宣布使命完成——是否达成由玩家的行动决定。",
+            "5. 不要让主角轻易死去。只有当玩家主动选择了必死的行为（正面硬闯枪口、跳下高楼、明知有炸还去抱）时，才可以写死亡。",
         ]
+
+        if act >= 2:
+            lines += [
+                "",
+                "【第二幕】上一幕的使命已经失败，代价已经落地。",
+                "这一局不再是“完成使命”，而是“在失败之后活下来并拿回一点东西”。",
+                "本回合必须写清楚：失败造成的具体损失（人、物、信任、位置），以及主角此刻唯一能做的一件事。",
+                "语气要冷、要沉，不要安慰玩家，也不要把失败写成误会。",
+            ]
         return "\n".join(lines)
 
     def _clean_response(self, raw_text: str) -> str:
@@ -1081,7 +1092,7 @@ class DeepSeekProvider(LLMProvider):
 {scene_description[:3000]}
 
 只输出一个 JSON，不要解释：
-{{"advance": true/false, "stage_done": true/false, "setback": true/false, "note": "20字以内"}}
+{{"advance": true/false, "stage_done": true/false, "setback": true/false, "character_dead": false, "note": "20字以内"}}
 
 判定规则（这是游戏，不是现实，判定从宽、节奏从快）：
 - stage_done：只要剧情里出现了「{stage.get('name', '')}」所描述的结果——东西到手、话说出口、人到了、事办成了——就判 true。不要因为"还有后续麻烦""还不够稳妥"而判 false。
@@ -1089,6 +1100,8 @@ class DeepSeekProvider(LLMProvider):
 - setback：损失了时间、人、物资、信誉，或者暴露了行踪。
 - 三者可以并存，例如 stage_done=true 且 setback=true。
 - 宁可判进，不要判滞。玩家需要看到进展，而不是反复磨同一件事。
+- character_dead：只有当剧情明确写了主角死亡（断气、当场毙命、被吞掉，且没有救回来的余地）才为 true。
+  受伤、昏迷、被抓、被围、濒死都不算。默认 false。
 - note 只写这一步实际发生了什么，不要复述剧情。"""
 
         try:
@@ -1109,10 +1122,66 @@ class DeepSeekProvider(LLMProvider):
                 "advance": bool(data.get("advance")),
                 "stage_done": bool(data.get("stage_done")),
                 "setback": bool(data.get("setback")),
+                "character_dead": bool(data.get("character_dead")),
                 "note": str(data.get("note") or "")[:40],
             }
         except Exception as e:
             logger.warning("MISSION_JUDGE_ERR: %s", e)
+            return None
+
+    async def generate_mission(self, character_info: Dict) -> Optional[Dict]:
+        """给自定义角色按背景生成一条使命（开局时调用一次）。"""
+        prompt = f"""你要给一个自定义角色设计这一局的主线使命。
+
+角色：{character_info.get('name')}，{character_info.get('rank')}，{character_info.get('age')}岁，{character_info.get('gender')}
+世界：{character_info.get('novel')}
+时间节点：{character_info.get('timeline')}
+角色背景：{(character_info.get('background') or '')[:400]}
+
+要求：
+- 使命要小、具体、有期限、有赌注，和他的身份/背景直接相关，不要写"拯救天下"这种空话。
+- 三个阶段要能一步步做出来，每阶段 12 字以内，detail 24 字以内说明怎么做。
+- deadline_turns 固定 12；stakes 要具体到人和物。
+
+只输出 JSON：
+{{"title": "≤12字", "goal": "20-40字，一句话说清要做什么、期限是什么",
+  "stages": [{{"name": "≤12字", "detail": "≤24字"}}, {{"...": "..."}}, {{"...": "..."}}],
+  "deadline_turns": 12, "stakes": "15-30字，失败的后果"}}"""
+
+        try:
+            text = ""
+            for attempt in (1, 2):
+                resp = await self._acreate(
+                    model=settings.DEEPSEEK_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=False,
+                    temperature=0.9,
+                    max_tokens=900,
+                    timeout=45,
+                    **(_thinking_kwargs() if attempt == 1 else {"extra_body": {"thinking": {"type": "disabled"}}}),
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                if text:
+                    break
+                logger.warning("CUSTOM_MISSION_EMPTY: attempt=%d 空响应，关思考重试", attempt)
+            if not text:
+                raise ValueError("empty content")
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            data = json.loads(match.group(0) if match else text)
+            stages = [st for st in (data.get("stages") or []) if isinstance(st, dict) and st.get("name")][:3]
+            if not data.get("title") or not data.get("goal") or len(stages) < 2:
+                raise ValueError("mission incomplete")
+            return {
+                "title": str(data["title"])[:20],
+                "goal": str(data["goal"])[:80],
+                "stages": [{"name": str(st["name"])[:20], "detail": str(st.get("detail") or "")[:40]} for st in stages],
+                "deadline_turns": 12,
+                "stakes": str(data.get("stakes") or "这一次再退，就没有下一次了")[:60],
+            }
+        except Exception as e:
+            logger.warning("CUSTOM_MISSION_GEN_FAIL: %s", str(e)[:160])
             return None
 
     async def generate_choices(

@@ -175,9 +175,19 @@ async def create_game_session(
         points=session_character["starting_points"],
         achievements=[]
     )
-    game_session.mission_state = GameService.init_mission_state(
-        (character_info or {}).get("mission")
-    )
+    mission_def = (character_info or {}).get("mission")
+    if not mission_def and character.character_type != "preset":
+        # 自定义角色：按姓名/身份/背景现拟一条使命
+        mission_def = await GameService.generate_custom_mission({
+            "name": session_character["name"],
+            "rank": session_character["rank"],
+            "age": session_character["age"],
+            "gender": session_character["gender"],
+            "background": session_character.get("background") or "",
+            "novel": character.novel,
+            "timeline": character.timeline,
+        })
+    game_session.mission_state = GameService.init_mission_state(mission_def)
 
     # 创建初始场景
     if character.character_type == "preset" and character_info:
@@ -253,6 +263,18 @@ async def perform_action(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权访问此游戏会话"
         )
+
+    # 主角已死：这一局结束，不再接受行动
+    if GameService.is_ended(game_session):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "这一局已经结束了。主角已经死了，去「我的游戏」开始新的一局吧。", "ended": True},
+        )
+
+    # 上一回合使命失败 → 本回合切到第二幕
+    if GameService.enter_second_act(game_session):
+        await db.commit()
+        logger.info("MISSION_SECOND_ACT: session_id=%d", game_session.id)
 
     # 准备角色信息
     character_info = {
@@ -460,6 +482,19 @@ async def perform_action_stream(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="无权访问此游戏会话",
         )
+
+    # 主角已死：终局，不再生成剧情
+    if GameService.is_ended(game_session):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "这一局已经结束了。主角已经死了，去「我的游戏」开始新的一局吧。", "ended": True},
+        )
+
+    # 上一回合使命失败 → 本回合进入第二幕
+    if GameService.enter_second_act(game_session):
+        # 必须立刻落库：流式端点稍后会重新 SELECT 一次会话，不提交的话会读到旧的 failed
+        await db.commit()
+        logger.info("MISSION_SECOND_ACT_STREAM: session_id=%d", game_session.id)
 
     character_info = {
         "name": game_session.character_name,
