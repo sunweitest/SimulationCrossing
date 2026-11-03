@@ -28,6 +28,19 @@ logger = logging.getLogger("game_api")
 router = APIRouter(prefix="/api/game", tags=["游戏"])
 
 
+async def _claim_anonymous_session(db: AsyncSession, game_session: GameSession, current_user) -> None:
+    """游客存档在登录后归到该用户名下。
+
+    没有这一步，登录前创建的会话 user_id 仍是 NULL，登录后再操作会判成
+    「无权访问」（403），用户看到的就是「登录后进度没保存」。
+    """
+    if current_user is None or game_session.user_id is not None:
+        return
+    game_session.user_id = current_user.id
+    await db.commit()
+    logger.info("SESSION_CLAIMED: session_id=%d new_owner=%d", game_session.id, current_user.id)
+
+
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
@@ -218,6 +231,7 @@ async def perform_action(
         )
 
     # 验证会话所有权（如果用户已登录）
+    await _claim_anonymous_session(db, game_session, current_user)
     if current_user and game_session.user_id != current_user.id:
         logger.warning("ACTION: 权限拒绝 session_id=%d owner=%s requester=%s",
                        action_data.game_session_id, game_session.user_id, current_user.id)
@@ -400,6 +414,7 @@ async def perform_action_stream(
             detail="游戏会话不存在",
         )
 
+    await _claim_anonymous_session(db, game_session, current_user)
     if current_user and game_session.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -591,6 +606,7 @@ async def get_game_session(
         )
 
     # 验证会话所有权
+    await _claim_anonymous_session(db, game_session, current_user)
     if current_user and game_session.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -618,6 +634,7 @@ async def delete_game_session(
             detail="游戏会话不存在"
         )
 
+    await _claim_anonymous_session(db, game_session, current_user)
     if game_session.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

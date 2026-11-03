@@ -66,10 +66,18 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
+
+// 注册后回到触发注册的页面（比如正在玩的对局），否则去创建角色
+const goAfterAuth = () => {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  const safe = redirect.startsWith('/') && !redirect.startsWith('//')
+  router.push(safe ? redirect : '/character-create')
+}
 const authStore = useAuthStore()
 
 const form = ref({
@@ -108,7 +116,7 @@ const handleRegister = async () => {
       phone: form.value.phone || null,
       password: form.value.password
     })
-    router.push('/character-create')
+    goAfterAuth()
   } catch (err) {
     error.value = err.response?.data?.detail || '注册失败，请重试'
   } finally {

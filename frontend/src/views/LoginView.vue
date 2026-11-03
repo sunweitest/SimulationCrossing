@@ -50,10 +50,11 @@
 
 <script setup>
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
 const form = ref({
@@ -64,13 +65,21 @@ const form = ref({
 const loading = ref(false)
 const error = ref('')
 
+// 登录后回到触发登录的页面（比如正在玩的对局），否则去创建角色
+const goAfterAuth = () => {
+  const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+  // 只接受站内路径，避免被外部链接当跳板
+  const safe = redirect.startsWith('/') && !redirect.startsWith('//')
+  router.push(safe ? redirect : '/character-create')
+}
+
 const handleLogin = async () => {
   loading.value = true
   error.value = ''
 
   try {
     await authStore.login(form.value)
-    router.push('/character-create')
+    goAfterAuth()
   } catch (err) {
     error.value = err.response?.data?.detail || '登录失败，请检查账号密码'
   } finally {

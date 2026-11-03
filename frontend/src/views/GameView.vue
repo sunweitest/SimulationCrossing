@@ -87,7 +87,7 @@
     <Transition name="fade">
       <div v-if="error" class="error-toast">
         <p>{{ error }}</p>
-        <router-link v-if="needsLogin" to="/login" class="error-login-link">前往登录</router-link>
+        <router-link v-if="needsLogin" :to="{ path: '/login', query: { redirect: route.fullPath } }" class="error-login-link">前往登录</router-link>
         <button @click="error = ''" class="error-close">✕</button>
       </div>
     </Transition>
