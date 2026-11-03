@@ -39,7 +39,7 @@
       @click="missionOpen = !missionOpen"
     >
       <span class="mb-mark">◎</span>
-      <span v-if="mission.act >= 2" class="mb-chip mb-act">第二幕</span>
+      <span v-if="mission.act >= 2" class="mb-chip mb-act">{{ actLabel }}</span>
       <span class="mb-title">{{ mission.title }}</span>
       <span v-if="mission.status === 'done'" class="mb-chip mb-chip-done">使命达成</span>
       <span v-else-if="mission.status === 'failed'" class="mb-chip mb-chip-failed">使命未竟</span>
@@ -477,6 +477,12 @@ const deriveMission = (ms) => {
     last_note: ms.last_note || '',
   }
 }
+
+const actLabel = computed(() => {
+  const cn = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+  const n = Number(mission.value?.act || 1)
+  return `第${cn[n] || n}幕`
+})
 
 const mission = computed(() => {
   const ms = gameStore.currentSession?.mission_state

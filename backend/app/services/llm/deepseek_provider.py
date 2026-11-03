@@ -1129,6 +1129,84 @@ class DeepSeekProvider(LLMProvider):
             logger.warning("MISSION_JUDGE_ERR: %s", e)
             return None
 
+    async def generate_next_act(self, context: Dict) -> Optional[Dict]:
+        """上一幕失败后，结合"到底输在哪"生成下一幕的使命。
+
+        第二幕、第三幕……都走这里：每一幕的失败方式不同，下一幕的目标就不同。
+        """
+        failed = context.get("failed_mission") or {}
+        stages = failed.get("stages") or []
+        recent = context.get("recent_story") or ""
+        attempt = int(context.get("next_act") or 2)
+
+        stage_lines = "\n".join(
+            f"- {s.get('name','')}：{s.get('detail','')}" for s in stages
+        ) or "（没有记录）"
+
+        prompt = f"""你在写一部多幕互动小说。主角刚刚**搞砸了**上一幕的使命，现在要写第{attempt}幕。
+
+主角：{context.get('name')}（{context.get('rank')}，{context.get('age')}岁，{context.get('gender')}）
+世界：{context.get('novel')} · {context.get('timeline')}
+
+【上一幕失败的使命】
+标题：{failed.get('title','')}
+目标：{failed.get('goal','')}
+赌注：{failed.get('stakes','')}
+阶段：
+{stage_lines}
+最后判定：{context.get('last_note','')}
+已走过回合：{context.get('turns_used',0)}
+
+【最近发生的剧情】
+{recent[:1200]}
+
+要求：
+1. 第{attempt}幕必须**从失败的具体后果开始**：上一幕输掉的东西已经没了，现在主角想要的是补救、报复、脱身或换一条路。不要假装什么都没发生，也不要重复上一幕的目标。
+2. 三个阶段要能一步步做出来，和刚才失败的现场有直接关系（同一个人、同一件东西、同一个地方）。
+3. 有期限（deadline_turns 固定 10）、有赌注，失败还会有下一次代价。
+4. 语气与上面剧情一致，不要写空话。
+
+只输出 JSON：
+{{"title": "≤12字，本幕主线名", "goal": "20-45字，接着失败后果说清楚现在要做什么",
+  "stages": [{{"name": "≤12字", "detail": "≤24字，怎么做"}}, {{"...": "..."}}, {{"...": "..."}}],
+  "deadline_turns": 10, "stakes": "15-30字，这一幕再失败的后果"}}"""
+
+        try:
+            text = ""
+            for attempt_no in (1, 2):
+                resp = await self._acreate(
+                    model=settings.DEEPSEEK_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=False,
+                    temperature=0.9,
+                    max_tokens=900,
+                    timeout=45,
+                    **(_thinking_kwargs() if attempt_no == 1 else {"extra_body": {"thinking": {"type": "disabled"}}}),
+                )
+                text = (resp.choices[0].message.content or "").strip()
+                if text:
+                    break
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
+            data = json.loads(match.group(0) if match else text)
+            stages_out = [st for st in (data.get("stages") or []) if isinstance(st, dict) and st.get("name")][:3]
+            if not data.get("title") or not data.get("goal") or len(stages_out) < 2:
+                raise ValueError("next act incomplete")
+            return {
+                "title": str(data["title"])[:20],
+                "goal": str(data["goal"])[:90],
+                "stages": [
+                    {"name": str(st["name"])[:20], "detail": str(st.get("detail") or "")[:40]}
+                    for st in stages_out
+                ],
+                "deadline_turns": 10,
+                "stakes": str(data.get("stakes") or "这一幕再输，就没有下一幕了")[:60],
+            }
+        except Exception as e:
+            logger.warning("NEXT_ACT_GEN_FAIL: %s", str(e)[:160])
+            return None
+
     async def generate_mission(self, character_info: Dict) -> Optional[Dict]:
         """给自定义角色按背景生成一条使命（开局时调用一次）。"""
         prompt = f"""你要给一个自定义角色设计这一局的主线使命。

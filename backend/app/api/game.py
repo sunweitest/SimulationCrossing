@@ -272,9 +272,9 @@ async def perform_action(
         )
 
     # 上一回合使命失败 → 本回合切到第二幕
-    if GameService.enter_second_act(game_session):
+    if await GameService.enter_next_act(game_session, db):
         await db.commit()
-        logger.info("MISSION_SECOND_ACT: session_id=%d", game_session.id)
+        logger.info("MISSION_NEXT_ACT: session_id=%d", game_session.id)
 
     # 准备角色信息
     character_info = {
@@ -491,10 +491,10 @@ async def perform_action_stream(
         )
 
     # 上一回合使命失败 → 本回合进入第二幕
-    if GameService.enter_second_act(game_session):
+    if await GameService.enter_next_act(game_session, db):
         # 必须立刻落库：流式端点稍后会重新 SELECT 一次会话，不提交的话会读到旧的 failed
         await db.commit()
-        logger.info("MISSION_SECOND_ACT_STREAM: session_id=%d", game_session.id)
+        logger.info("MISSION_NEXT_ACT_STREAM: session_id=%d", game_session.id)
 
     character_info = {
         "name": game_session.character_name,

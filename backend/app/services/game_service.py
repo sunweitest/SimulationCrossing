@@ -354,47 +354,101 @@ class GameService:
         return result
 
     @staticmethod
-    def enter_second_act(session) -> bool:
-        """使命失败后的下一回合：切到第二幕。
+    async def enter_next_act(session, db=None) -> bool:
+        """上一幕失败后，进入下一幕。
 
-        不改写原来的失败记录，只补一条“活下去”的新阶段线，让故事有下一步可走。
-        返回 True 表示本回合已经是第二幕。
+        第二幕、第三幕……都走这里：先让 LLM 结合"到底输在哪"生成新使命，
+        失败时才退回通用模板。返回 True 表示本回合已经是新的一幕。
         """
         stored = session.mission_state
         if not isinstance(stored, dict) or not isinstance(stored.get("mission"), dict):
             return False
-        if stored.get("status") != "failed" or int(stored.get("act") or 1) >= 2:
+        if stored.get("status") != "failed":
             return False
+
+        prev_act = int(stored.get("act") or 1)
+        next_act = prev_act + 1
+        mission = dict(stored["mission"])
+
+        # 最近几段剧情：让新一幕接着失败的现场，而不是凭空重启
+        recent_story = ""
+        if db is not None:
+            try:
+                rows = (
+                    await db.execute(
+                        select(SceneHistory)
+                        .where(SceneHistory.game_session_id == session.id)
+                        .order_by(SceneHistory.turn_index.desc())
+                        .limit(3)
+                    )
+                ).scalars().all()
+                recent_story = "\n\n".join(
+                    r.scene_description for r in reversed(rows) if r.scene_description
+                )
+            except Exception as exc:
+                logger.warning("NEXT_ACT_CONTEXT_FAIL: %s", exc)
+
+        context = {
+            "next_act": next_act,
+            "name": session.character_name,
+            "rank": session.character_rank,
+            "age": session.character_age,
+            "gender": session.character_gender,
+            "novel": session.novel,
+            "timeline": session.timeline,
+            "failed_mission": mission,
+            "last_note": stored.get("last_note") or "",
+            "turns_used": stored.get("turns_used") or 0,
+            "recent_story": recent_story,
+        }
+
+        generated = None
+        provider = get_provider()
+        if hasattr(provider, "generate_next_act"):
+            try:
+                generated = await provider.generate_next_act(context)
+            except Exception as exc:
+                logger.warning("NEXT_ACT_FAIL: %s", exc)
+
+        if generated:
+            mission = generated
+            logger.info("NEXT_ACT_OK: session=%d act=%d title=%s", session.id, next_act, mission.get("title"))
+        else:
+            base_title = str(mission.get("title", "")).rstrip("…")
+            mission = {
+                "title": base_title[:12] or "活下去",
+                "goal": "上一幕的目标已经废了，先从这个局面里脱身，再谈别的",
+                "stages": [
+                    {"name": "离开失败的现场", "detail": "先走到没人的地方，把伤和气息稳住"},
+                    {"name": "找一个还愿意搭话的人", "detail": "这个人可能救你，也可能卖你"},
+                    {"name": "换到一条新的活路", "detail": "用身上还剩的东西去换"},
+                ],
+                "deadline_turns": 10,
+                "stakes": "这一幕再输，就真的没有下一幕了",
+            }
+            logger.warning("NEXT_ACT_FALLBACK: session=%d act=%d", session.id, next_act)
+
+        cn = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
+        act_label = f"第{cn[next_act] if next_act < len(cn) else next_act}幕"
+        mission["title"] = f"{act_label}·{mission.get('title', '')}"[:24]
+        mission["deadline_turns"] = mission.get("deadline_turns") or 10
 
         ms = dict(stored)
         ms["log"] = list(ms.get("log") or [])
-        mission = dict(ms["mission"])
-        failed_title = str(mission.get("title", ""))
-        while failed_title.startswith("第二幕·"):
-            failed_title = failed_title[len("第二幕·"):]
-        failed_title = failed_title.rstrip("…")
-        mission["title"] = f"第二幕·{(failed_title[:10] + '…') if len(failed_title) > 10 else failed_title}"
-        mission["goal"] = "使命已经失败，代价落地了。你现在只想活下来，并拿回一样东西。"
-        mission["stages"] = [
-            {"name": "从失败的现场脱身", "detail": "先离开这个已经不属于你的地方"},
-            {"name": "找到一个还愿意收留你的人或据点", "detail": "代价是要替对方做一件事"},
-            {"name": "拿回一样能让你翻身的东西", "detail": "或彻底放弃它，换一条活路"},
-        ]
-        mission["deadline_turns"] = 10
-        mission["stakes"] = "上一幕输掉的东西，这一幕要么拿回来，要么认了"
-
         ms["mission"] = mission
-        ms["act"] = 2
+        ms["act"] = next_act
         ms["stage_index"] = 0
+        ms["stage_count"] = len(mission.get("stages") or []) or 3
+        ms["stage_name"] = (mission.get("stages") or [{}])[0].get("name", "")
         ms["stage_progress"] = 0
-        ms["deadline_turns"] = 10
-        ms["days_left"] = 10
+        ms["deadline_turns"] = mission["deadline_turns"]
+        ms["days_left"] = mission["deadline_turns"]
         ms["turns_used"] = 0
         ms["penalty"] = 0
         ms["status"] = "active"
         ms["last_label"] = ""
-        ms["last_note"] = "使命失败，进入第二幕"
-        ms["log"].append({"turn": 0, "stage": "第二幕开启", "note": failed_title})
+        ms["last_note"] = f"使命失败，进入{act_label}"
+        ms["log"].append({"turn": 0, "stage": f"{act_label}开启", "note": mission.get("goal", "")})
 
         session.mission_state = ms
         return True
