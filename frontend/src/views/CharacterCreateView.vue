@@ -15,6 +15,7 @@
       <h1 class="top-title">🎭 角色创建</h1>
       <span class="top-subtitle">{{ form.novel }} · {{ currentWorldImage.caption }}</span>
       <div v-if="authStore.isAuthenticated" class="top-auth">
+        <router-link to="/ladder" class="top-link">🏆 天梯</router-link>
         <router-link to="/my-games" class="top-link">📋 我的游戏</router-link>
         <span class="top-user">{{ authStore.user?.email || authStore.user?.phone || '已登录' }}</span>
         <button class="btn btn-sm" @click="handleLogout">退出</button>
@@ -60,13 +61,33 @@
             </div>
           </div>
         </div>
+
+        <!-- 想看哪个世界：投票 -->
+        <div class="vote-panel">
+          <div class="vote-head">
+            <h3>🗳 下一个世界做什么？</h3>
+            <span>共 {{ voteTotal }} 票 · 点一下投票，再点取消</span>
+          </div>
+          <div class="vote-chips">
+            <button
+              v-for="c in voteCandidates"
+              :key="c.name"
+              class="vote-chip"
+              :class="{ voted: c.voted }"
+              @click="toggleVote(c)"
+            >
+              <strong>{{ c.name }}</strong>
+              <span class="vote-count">{{ c.votes }}</span>
+              <span class="vote-hint">{{ c.hint }}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- ===== 第二步：选择角色/剧情 ===== -->
+      <!-- ===== 第二步：先选角色，再选时间节点 ===== -->
       <div v-else class="card-grid">
-        <!-- 左侧：角色创建表单 -->
+        <!-- 左侧：角色 → 时间 -->
         <div class="glass-card">
-          <!-- 当前世界 -->
           <div class="selected-world">
             <div class="selected-world-cover" :style="{ backgroundImage: `url(${currentWorldImage.thumb})` }"></div>
             <div class="selected-world-meta">
@@ -76,119 +97,143 @@
             <button class="change-world" @click="backToWorlds">↺ 换世界</button>
           </div>
 
-          <h2>选择角色与剧情</h2>
+          <!-- 2A：选角色 -->
+          <template v-if="!selectedChar">
+            <h2>选择你要成为的人</h2>
+            <p class="step-hint">
+              共 {{ worldCharacters.length }} 个角色 · 带「小人物」标记的往往更难，也更像我们自己的日子
+            </p>
 
-          <div class="input-group">
-            <label>选择时间节点</label>
-            <select v-model="form.timeline" class="input">
-              <option v-for="timeline in timelines" :key="timeline" :value="timeline">
-                {{ timeline }}
-              </option>
-            </select>
-          </div>
-
-          <div class="input-group">
-            <label>角色类型</label>
-            <div class="radio-group">
-              <label class="radio-label">
-                <input type="radio" v-model="characterType" value="preset" />
-                选择已有角色
-              </label>
-              <label class="radio-label">
-                <input type="radio" v-model="characterType" value="custom" />
-                创建自定义角色
-              </label>
-            </div>
-          </div>
-
-          <!-- 预设角色选择 -->
-          <div v-if="characterType === 'preset'" class="input-group">
-            <label>选择角色</label>
-            <select v-model="selectedPresetCharacter" class="input" @change="onPresetCharacterChange">
-              <option value="">请选择...</option>
-              <option v-for="char in presetCharacters" :key="char" :value="char">
-                {{ char }}
-              </option>
-            </select>
-          </div>
-
-          <!-- 自定义角色 -->
-          <div v-if="characterType === 'custom'">
-            <div class="input-group">
-              <label>角色姓名</label>
-              <input v-model="form.name" type="text" class="input" placeholder="输入角色姓名" />
+            <div v-if="charLoading" class="char-loading">
+              <div class="spinner"></div>
+              <span>正在唤醒这个世界的人…</span>
             </div>
 
-            <div class="grid grid-2">
+            <div v-else class="char-grid">
+              <button
+                v-for="c in worldCharacters"
+                :key="c.name"
+                class="char-card"
+                :class="{ 'is-minor': c.is_minor }"
+                @click="chooseCharacter(c)"
+              >
+                <div
+                  class="char-portrait"
+                  :style="c.image ? { backgroundImage: `url(${c.image})` } : {}"
+                >
+                  <span v-if="!c.image" class="char-initial">{{ c.name.slice(0, 1) }}</span>
+                  <span v-if="c.is_minor" class="char-flag">小人物</span>
+                </div>
+                <div class="char-meta">
+                  <strong>{{ c.name }}</strong>
+                  <span class="char-rank">{{ c.rank }}</span>
+                  <span class="char-sub">{{ c.gender }} · {{ c.age }}岁 · {{ c.timelines.length }} 个时间点</span>
+                </div>
+              </button>
+
+              <button class="char-card char-card-custom" @click="chooseCustom">
+                <div class="char-portrait char-portrait-custom"><span class="char-plus">＋</span></div>
+                <div class="char-meta">
+                  <strong>自定义角色</strong>
+                  <span class="char-rank">自己定姓名与身份</span>
+                </div>
+              </button>
+            </div>
+          </template>
+
+          <!-- 2B：选时间节点 -->
+          <template v-else>
+            <button class="char-back" @click="backToCharacters">← 重选角色</button>
+            <h2>
+              {{ characterType === 'custom' ? '自定义角色' : charDisplay?.name + ' · 选择时间节点' }}
+            </h2>
+
+            <!-- 自定义角色表单 -->
+            <template v-if="characterType === 'custom'">
               <div class="input-group">
-                <label>性别</label>
-                <select v-model="form.gender" class="input">
-                  <option>男性</option>
-                  <option>女性</option>
+                <label>角色姓名</label>
+                <input v-model="form.name" type="text" class="input" placeholder="输入角色姓名" />
+              </div>
+
+              <div class="grid grid-2">
+                <div class="input-group">
+                  <label>性别</label>
+                  <select v-model="form.gender" class="input">
+                    <option>男性</option>
+                    <option>女性</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label>年龄</label>
+                  <input v-model.number="form.age" type="number" class="input" min="18" />
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label>初始身份</label>
+                <select v-model="form.rank" class="input">
+                  <optgroup label="皇族贵胄">
+                    <option>皇帝</option><option>皇后</option><option>太子</option>
+                    <option>皇子</option><option>公主</option><option>王爷</option>
+                    <option>王妃</option><option>贵妃</option>
+                  </optgroup>
+                  <optgroup label="将相官吏">
+                    <option>将军</option><option>军师</option><option>士兵</option>
+                    <option>文官</option><option>小吏</option><option>太监</option>
+                  </optgroup>
+                  <optgroup label="江湖民间">
+                    <option>侠客</option><option>读书人</option><option>商人</option>
+                    <option>大小姐</option><option>平民</option><option>宫女</option>
+                    <option>道士</option><option>僧人</option><option>郎中</option>
+                  </optgroup>
+                  <optgroup label="其他"><option>未知</option></optgroup>
                 </select>
               </div>
 
               <div class="input-group">
-                <label>年龄</label>
-                <input v-model.number="form.age" type="number" class="input" min="18" />
+                <label>角色背景（可选）</label>
+                <textarea v-model="form.background" class="input" rows="3" placeholder="描述角色的背景故事..."></textarea>
+              </div>
+            </template>
+
+            <!-- 时间节点（预设角色只列这个人真正在场的节点） -->
+            <div class="input-group">
+              <label>从哪个时刻开始</label>
+              <div class="tl-list">
+                <button
+                  v-for="t in charTimelines"
+                  :key="t.name"
+                  class="tl-card"
+                  :class="{ active: form.timeline === t.name }"
+                  @click="form.timeline = t.name"
+                >
+                  <strong>{{ t.name }}</strong>
+                  <span>{{ t.background }}</span>
+                </button>
               </div>
             </div>
-
-            <div class="input-group">
-              <label>初始身份</label>
-              <select v-model="form.rank" class="input">
-                <optgroup label="皇族贵胄">
-                  <option>皇帝</option>
-                  <option>皇后</option>
-                  <option>太子</option>
-                  <option>皇子</option>
-                  <option>公主</option>
-                  <option>王爷</option>
-                  <option>王妃</option>
-                  <option>贵妃</option>
-                </optgroup>
-                <optgroup label="将相官吏">
-                  <option>将军</option>
-                  <option>军师</option>
-                  <option>士兵</option>
-                  <option>文官</option>
-                  <option>小吏</option>
-                  <option>太监</option>
-                </optgroup>
-                <optgroup label="江湖民间">
-                  <option>侠客</option>
-                  <option>读书人</option>
-                  <option>商人</option>
-                  <option>大小姐</option>
-                  <option>平民</option>
-                  <option>宫女</option>
-                  <option>道士</option>
-                  <option>僧人</option>
-                  <option>郎中</option>
-                </optgroup>
-                <optgroup label="其他">
-                  <option>未知</option>
-                </optgroup>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label>角色背景（可选）</label>
-              <textarea v-model="form.background" class="input" rows="4" placeholder="描述角色的背景故事..."></textarea>
-            </div>
-          </div>
+          </template>
 
           <div v-if="error" class="error-message">{{ error }}</div>
 
-          <button @click="startGame" class="btn btn-primary btn-block btn-start" :disabled="loading">
+          <button
+            @click="startGame"
+            class="btn btn-primary btn-block btn-start"
+            :disabled="loading || (!selectedChar && characterType !== 'custom')"
+          >
             {{ loading ? '⏳ 穿越中...' : '🚀 开始穿越' }}
           </button>
         </div>
 
-        <!-- 右侧：角色预览 -->
+        <!-- 右侧：预览 -->
         <div class="glass-card">
           <h2>角色预览</h2>
           <div v-if="previewCharacter" class="character-preview">
+            <div
+              v-if="previewCharacter.image"
+              class="preview-portrait"
+              :style="{ backgroundImage: `url(${previewCharacter.image})` }"
+            ></div>
             <div class="preview-item">
               <span class="label">姓名</span>
               <span class="value">{{ previewCharacter.name }}</span>
@@ -224,11 +269,12 @@
             <div class="preview-badge">
               <span v-if="characterType === 'preset'" class="badge badge-success">🎭 经典角色</span>
               <span v-else class="badge">✨ 自定义角色</span>
+              <span v-if="previewCharacter.is_minor" class="badge badge-minor">小人物</span>
             </div>
           </div>
           <div v-else class="preview-empty">
             <span class="empty-icon">📋</span>
-            <span>请选择或创建角色</span>
+            <span>先在上方选一个人</span>
           </div>
         </div>
       </div>
@@ -252,15 +298,21 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
-import { gameAPI } from '@/api'
+import { gameAPI, communityAPI } from '@/api'
 import AuthModal from '@/components/AuthModal.vue'
 import sanguoImage from '../../../images/sanguo.png'
 import shuihuImage from '../../../images/shuihu.png'
 import mingdaiImage from '../../../images/mingdai.png'
 import hongloumengImage from '../../../images/hongloumeng.png'
+import qingdaiImage from '../../../images/qingdai.png'
 import xiyouImage from '../../../images/xiyou.png'
 import jinpingmeiImage from '../../../images/jinpingmei.png'
 import wastelandImage from '../../../images/wasteland.png'
+import fengshenImage from '../../../images/fengshen.png'
+import wuxiaImage from '../../../images/wuxia.png'
+import xianxiaImage from '../../../images/xianxia.png'
+import datangImage from '../../../images/datang.png'
+import bianjingImage from '../../../images/bianjing.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -276,6 +328,11 @@ const characterType = ref('preset')
 const selectedPresetCharacter = ref('')
 const loading = ref(false)
 const error = ref('')
+const worldCharacters = ref([])   // 当前世界的全部角色（含小人物）
+const charLoading = ref(false)
+const selectedChar = ref(null)    // 选中的角色对象；自定义时为 { custom: true }
+const voteCandidates = ref([])
+const voteTotal = ref(0)
 const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
 
 const form = ref({
@@ -300,7 +357,13 @@ const FALLBACK_NOVELS = {
   '清代': ['八旗入关', '康熙继位', '九子夺嫡', '马戛尔尼访华', '虎门销烟', '金田起义', '第二次中英战争', '洋务运动', '甲午战争', '八国联军进京', '预备立宪'],
   '西游记': ['大闹天宫', '五行山下', '西天取经', '三打白骨精', '女儿国', '真假美猴王', '火焰山', '取得真经'],
   '金瓶梅': ['结拜发迹', '王婆说风情', '毒杀武大', '娶李瓶儿', '生子鼎盛', '妻妾争宠', '暴毙家败', '妻妾散场'],
-  '废土末世': ['灾变降临', '秩序崩坏', '废土求生', '势力割据', '文明余烬']
+  '废土末世': ['灾变降临', '秩序崩坏', '废土求生', '势力割据', '文明余烬'],
+  '红楼梦': ['元妃省亲', '大观园结社', '抄检大观园', '荣府抄家', '白茫茫大地'],
+  '封神演义': ['女娲宫题诗', '妲己入宫', '黄飞虎反五关', '闻仲伐西岐', '牧野之战'],
+  '武侠江湖': ['初入江湖', '武林大会', '魔教东来', '名剑之争', '江湖落幕'],
+  '仙侠修真': ['拜入山门', '筑基试炼', '宗门大比', '正魔之争', '飞升雷劫'],
+  '大唐长安·天宝末年': ['天宝盛世', '谪仙入宫', '渔阳鼙鼓', '马嵬之变', '长安收复'],
+  '北宋汴京之变': ['宣和盛世', '花石纲', '金兵南下', '靖康之变', '南渡']
 }
 
 // 从API加载的角色详情缓存
@@ -323,7 +386,7 @@ const worldImageMap = {
     caption: '宫阙深处，风云暗涌'
   },
   '清代': {
-    src: hongloumengImage,
+    src: qingdaiImage,
     thumb: '/images/covers/qingdai.webp',
     caption: '盛世帘影，旧梦将醒'
   },
@@ -341,6 +404,36 @@ const worldImageMap = {
     src: wastelandImage,
     thumb: '/images/covers/wasteland.webp',
     caption: '废土荒原，文明余烬'
+  },
+  '红楼梦': {
+    src: hongloumengImage,
+    thumb: '/images/covers/hongloumeng.webp',
+    caption: '大观园里，一梦浮生'
+  },
+  '封神演义': {
+    src: fengshenImage,
+    thumb: '/images/covers/fengshen.webp',
+    caption: '三界押注，商亡周兴'
+  },
+  '武侠江湖': {
+    src: wuxiaImage,
+    thumb: '/images/covers/wuxia.webp',
+    caption: '一柄刀，一个理由'
+  },
+  '仙侠修真': {
+    src: xianxiaImage,
+    thumb: '/images/covers/xianxia.webp',
+    caption: '从杂役到雷劫之下'
+  },
+  '大唐长安·天宝末年': {
+    src: datangImage,
+    thumb: '/images/covers/datang.webp',
+    caption: '开元全盛日，一夜转衰'
+  },
+  '北宋汴京之变': {
+    src: bianjingImage,
+    thumb: '/images/covers/bianjing.webp',
+    caption: '汴河千帆，终成旧梦'
   }
 }
 
@@ -357,6 +450,15 @@ const presetCharacters = computed(() => {
   // 返回当前时间节点可用的角色
   return novelData[form.value.timeline] || []
 })
+
+const charTimelines = computed(() => {
+  if (characterType.value === 'custom') {
+    return timelines.value.map(name => ({ name, background: '' }))
+  }
+  return selectedChar.value?.timelines || []
+})
+
+const charDisplay = computed(() => (selectedChar.value?.custom ? null : selectedChar.value))
 
 const currentWorldImage = computed(() => worldImageMap[form.value.novel] || worldImageMap['三国演义'])
 // 选世界阶段：背景用 400×225 缩略图（首屏只需 ~160KB，不拉 5MB 原图）；选完世界后再用大图
@@ -392,11 +494,9 @@ const selectedPresetInfo = computed(() => {
 
 const previewCharacter = computed(() => {
   if (characterType.value === 'custom') {
-    return form.value.name ? form.value : null
-  } else if (selectedPresetInfo.value) {
-    return selectedPresetInfo.value
+    return form.value.name ? { ...form.value, is_minor: false } : null
   }
-  return null
+  return selectedChar.value || null
 })
 
 const resetForNovel = () => {
@@ -412,10 +512,85 @@ const selectWorld = (novel) => {
   if (form.value.novel !== novel) {
     form.value.novel = novel
     resetForNovel()
-    loadCharacters()
+    selectedChar.value = null
+    worldCharacters.value = []
   }
   hoverNovel.value = ''
   step.value = 'character'
+  if (!selectedChar.value) loadWorldCharacters()
+  // 埋点失败不影响进入游戏
+  communityAPI.trackWorldClick(novel).catch(() => {})
+}
+
+// 先选角色：拉这个世界的人（含小人物、头像、可玩节点）
+const loadWorldCharacters = async () => {
+  charLoading.value = true
+  try {
+    const data = await communityAPI.getWorldCharacters(form.value.novel)
+    worldCharacters.value = data.characters || []
+  } catch (err) {
+    console.warn('加载世界角色失败，回退到旧接口:', err)
+    worldCharacters.value = []
+  } finally {
+    charLoading.value = false
+  }
+}
+
+const chooseCharacter = (c) => {
+  selectedChar.value = c
+  characterType.value = 'preset'
+  form.value.name = c.name
+  form.value.gender = c.gender || '男性'
+  form.value.age = c.age || 20
+  form.value.rank = c.rank || '未知'
+  form.value.background = c.background || ''
+  form.value.starting_points = c.starting_points || 0
+  form.value.timeline = c.timelines?.[0]?.name || timelines.value[0] || ''
+}
+
+const chooseCustom = () => {
+  selectedChar.value = { custom: true, name: '', timelines: [] }
+  characterType.value = 'custom'
+  form.value.name = ''
+  form.value.age = 20
+  form.value.rank = '未知'
+  form.value.background = ''
+  form.value.starting_points = 0
+  form.value.timeline = timelines.value[0] || ''
+  step.value = 'character'
+}
+
+const loadVotes = async () => {
+  try {
+    const data = await communityAPI.getWorldVotes()
+    voteCandidates.value = data.candidates || []
+    voteTotal.value = data.total_votes || 0
+  } catch (err) {
+    console.warn('投票列表加载失败:', err)
+  }
+}
+
+const toggleVote = async (c) => {
+  // 先乐观更新，失败再回滚
+  const before = c.voted
+  c.voted = !before
+  c.votes += before ? -1 : 1
+  voteTotal.value += before ? -1 : 1
+  try {
+    const res = await communityAPI.voteWorld(c.name)
+    c.voted = res.voted
+  } catch (err) {
+    c.voted = before
+    c.votes += before ? 1 : -1
+    voteTotal.value += before ? 1 : -1
+    error.value = '投票失败，请稍后再试'
+    setTimeout(() => { error.value = '' }, 3000)
+  }
+}
+
+const backToCharacters = () => {
+  selectedChar.value = null
+  error.value = ''
 }
 
 const backToWorlds = () => {
@@ -459,8 +634,10 @@ onMounted(async () => {
     }
   }
 
+  loadVotes()
+
   // 选世界阶段暂不预加载角色，进入角色页时再拉
-  if (step.value === 'character') await loadCharacters()
+  if (step.value === 'character') await loadWorldCharacters()
 })
 
 const onPresetCharacterChange = async () => {
@@ -519,15 +696,13 @@ const startGame = async () => {
   error.value = ''
 
   if (!form.value.name) {
-    error.value = '请输入角色姓名或选择预设角色'
+    error.value = '请先选一个角色，或填写自定义角色的姓名'
     return
   }
 
-  const age = characterType.value === 'preset' && selectedPresetInfo.value
-    ? Number(selectedPresetInfo.value.age)
-    : Number(form.value.age)
-  if (!Number.isFinite(age) || age < 18) {
-    error.value = '年龄请输入 18 岁以上的数字'
+  const age = Number(form.value.age)
+  if (characterType.value === 'custom' && (!Number.isFinite(age) || age < 18)) {
+    error.value = '自定义角色年龄请输入 18 岁以上的数字'
     return
   }
 
@@ -1153,4 +1328,270 @@ textarea.input {
     max-width: 1200px;
   }
 }
+
+/* ===== 角色优先选择：角色卡片网格 ===== */
+.step-hint {
+  margin: -0.25rem 0 1rem;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.62);
+  line-height: 1.6;
+}
+
+.char-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2rem 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.92rem;
+}
+
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 0.85rem;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.char-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: rgba(18, 22, 30, 0.55);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.char-card:hover,
+.char-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(231, 178, 106, 0.75);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+  outline: none;
+}
+
+.char-portrait {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: linear-gradient(155deg, #2b3a4a 0%, #1b2430 60%, #131a22 100%);
+  background-size: cover;
+  background-position: center top;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.char-initial {
+  font-size: 2.4rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 2px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.char-flag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  background: rgba(196, 122, 60, 0.9);
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.char-card.is-minor .char-portrait {
+  background-image: linear-gradient(155deg, #3a2f28 0%, #241d18 100%);
+}
+
+.char-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.55rem 0.65rem 0.7rem;
+  background: rgba(10, 13, 18, 0.75);
+}
+
+.char-meta strong {
+  font-size: 0.98rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.char-rank {
+  font-size: 0.76rem;
+  color: rgba(255, 255, 255, 0.66);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.char-sub {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.char-portrait-custom {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.04) 0 10px,
+    rgba(255, 255, 255, 0.08) 10px 20px
+  );
+}
+
+.char-plus {
+  font-size: 1.8rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.char-back {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.85rem;
+  padding: 0 0 0.6rem;
+  cursor: pointer;
+}
+
+.char-back:hover { color: #e7b26a; }
+
+/* 时间节点卡片 */
+.tl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 34vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(18, 22, 30, 0.55);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+  font: inherit;
+}
+
+.tl-card strong { font-size: 0.94rem; color: #fff; }
+.tl-card span { font-size: 0.8rem; color: rgba(255, 255, 255, 0.58); line-height: 1.5; }
+
+.tl-card:hover { border-color: rgba(231, 178, 106, 0.5); }
+
+.tl-card.active {
+  border-color: #e7b26a;
+  background: rgba(231, 178, 106, 0.12);
+}
+
+/* 预览头像 */
+.preview-portrait {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  border-radius: 10px;
+  margin-bottom: 0.8rem;
+  background-size: cover;
+  background-position: center 22%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.badge-minor {
+  background: rgba(196, 122, 60, 0.85);
+  color: #fff;
+  margin-left: 0.4rem;
+}
+
+@media (max-width: 768px) {
+  .char-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); max-height: 46vh; }
+  .char-initial { font-size: 1.9rem; }
+  .tl-list { max-height: 30vh; }
+}
+
+
+/* ===== 想看哪个世界：投票 ===== */
+.vote-panel {
+  margin-top: 1.2rem;
+  padding: 1rem 1.1rem 1.15rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(10, 13, 18, 0.55);
+  backdrop-filter: blur(6px);
+}
+
+.vote-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.vote-head h3 { margin: 0; font-size: 1rem; color: #fff; }
+.vote-head span { font-size: 0.78rem; color: rgba(255, 255, 255, 0.5); }
+
+.vote-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.vote-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.vote-chip:hover { border-color: rgba(231, 178, 106, 0.6); }
+
+.vote-chip.voted {
+  border-color: #e7b26a;
+  background: rgba(231, 178, 106, 0.16);
+  color: #ffe0b0;
+}
+
+.vote-count {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.76rem;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.vote-hint {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.42);
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 0.2s ease, opacity 0.2s ease;
+  opacity: 0;
+}
+
+.vote-chip:hover .vote-hint { max-width: 12rem; opacity: 1; }
+
 </style>

@@ -161,23 +161,27 @@ def install_images(out_dir: Path, items: list, cover_name: str | None,
         if not src.exists():
             continue
         if item.get("kind") == "cover" or item["name"] == cover_name:
-            dst = images_dir / f"{cover_target}.png"
+            dst = images_dir / f"{item.get('cover_target') or cover_target}.png"
         else:
             dst = scene_dir / f"{item['name']}.png"
         dst.write_bytes(src.read_bytes())
         copied.append(dst)
 
-    cover = images_dir / f"{cover_target}.png"
-    if cover.exists():
+    cover_targets = sorted({(it.get("cover_target") or cover_target) for it in items if it.get("kind") == "cover"} or {cover_target})
+    cover = images_dir / f"{cover_targets[0]}.png"
+    for ctarget in cover_targets:
+        cover = images_dir / f"{ctarget}.png"
+        if not cover.exists():
+            continue
         try:
             from PIL import Image
 
             resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
             with Image.open(cover) as im:
                 im.convert("RGB").resize((400, 225), resample).save(
-                    covers_dir / f"{cover_target}.webp", "WEBP", quality=80
+                    covers_dir / f"{ctarget}.webp", "WEBP", quality=80
                 )
-            copied.append(covers_dir / f"{cover_target}.webp")
+            copied.append(covers_dir / f"{ctarget}.webp")
         except ImportError:
             print("提示：没装 Pillow，封面缩略图没生成（uv pip install --python /opt/venv/bin/python pillow）")
 

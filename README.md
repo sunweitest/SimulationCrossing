@@ -297,6 +297,24 @@ npm run build
 
 项目由 AI 辅助开发完成
 
+## 加一个世界（内容与代码分离）
+
+世界内容以 `content/worlds/*.json` 为唯一来源，不写在迁移里：
+
+```bash
+# 导入/更新（按名字 upsert，可重复执行）
+python scripts/import_content.py import --file content/worlds/红楼梦.json
+python scripts/import_content.py import --dir content/worlds
+# 看各世界数据量
+python scripts/import_content.py check
+```
+
+新增世界还需要：封面图 + `covers/*.webp` 缩略图、`CharacterCreateView.vue` 的 `worldImageMap`、
+`MyGamesView.vue` 的封面映射、`LadderView.vue` 的 `COVERS`（详见 `docs/代码地图.md` 第 9 节）。
+
+现有 13 个世界：三国演义、水浒传、明代、清代、西游记、金瓶梅、废土末世、红楼梦、封神演义、
+武侠江湖、仙侠修真、大唐长安·天宝末年、北宋汴京之变；其中 47 个是「小人物」（差役、丫鬟、小妖、船工…）。
+
 ## 许可证
 
 MIT License

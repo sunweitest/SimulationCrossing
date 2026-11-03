@@ -52,6 +52,15 @@ export const gameAPI = {
   getNovels: () => api.get('/game/novels'),
 }
 
+// 社区 API：世界角色、点击埋点、投票、天梯
+export const communityAPI = {
+  getWorldCharacters: (novel) => api.get(`/community/world/${encodeURIComponent(novel)}/characters`),
+  trackWorldClick: (novel) => api.post('/community/world-click', { novel }),
+  getWorldVotes: () => api.get('/community/world-votes'),
+  voteWorld: (worldName) => api.post('/community/world-vote', { world_name: worldName }),
+  getLadder: (params) => api.get('/community/ladder', { params }),
+}
+
 // 管理后台 API（需要 X-Admin-Key 请求头）
 export const adminAPI = {
   lookupUser: (q, adminKey) =>

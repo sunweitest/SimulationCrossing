@@ -27,6 +27,11 @@ const routes = [
     meta: { requiresGame: true }
   },
   {
+    path: '/ladder',
+    name: 'Ladder',
+    component: () => import('@/views/LadderView.vue')
+  },
+  {
     path: '/my-games',
     name: 'MyGames',
     component: () => import('@/views/MyGamesView.vue'),
@@ -86,6 +91,20 @@ router.beforeEach((to, from, next) => {
   }
 
   next()
+})
+
+// 懒加载 chunk 拉取失败：发布后旧页面里的 chunk 名已不存在，强制刷新一次拿新版本
+// 否则用户只会看到空白页 + 控制台 "Failed to fetch dynamically imported module"
+router.onError((error, to) => {
+  const msg = String((error && error.message) || error)
+  const isChunkError = /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk [\w-]+ failed/i.test(msg)
+  if (!isChunkError) return
+  const KEY = 'chunk_reload_at'
+  const last = Number(sessionStorage.getItem(KEY) || 0)
+  if (Date.now() - last < 60000) return // 一分钟内只自动重载一次，避免死循环
+  sessionStorage.setItem(KEY, String(Date.now()))
+  const target = (to && to.fullPath) || location.pathname + location.search
+  location.replace(target)
 })
 
 export default router

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON, Index
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, JSON, Index, UniqueConstraint, text
 from sqlalchemy.orm import relationship
 from app.core.timeutil import now_cn
 from app.core.database import Base
@@ -108,6 +108,10 @@ class PresetCharacter(Base):
     rank = Column(String)
     background = Column(Text)
     starting_points = Column(Integer, default=0)
+    # 小人物标记：跑龙套、差役、丫鬟、小妖这类角色，给用户更多代入感
+    is_minor = Column(Boolean, nullable=False, default=False, server_default=text("false"), index=True)
+    # 角色头像（相对 public 的路径，如 /images/characters/红楼梦/贾宝玉.webp）
+    image = Column(String, nullable=True)
 
     timelines = relationship("CharacterTimeline", back_populates="character", cascade="all, delete-orphan")
 
@@ -150,3 +154,30 @@ class TimelineConfig(Base):
     created_at = Column(DateTime, default=now_cn)
 
     novel = relationship("NovelConfig", back_populates="timelines")
+
+
+class WorldClickEvent(Base):
+    """世界卡点击埋点：哪个世界被点开最多"""
+    __tablename__ = "world_click_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    novel = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    is_guest = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    client_ip = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=now_cn, index=True)
+
+
+class WorldVote(Base):
+    """「想看哪个世界」投票：同一 voter_key 对同一世界只算一票"""
+    __tablename__ = "world_votes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    world_name = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    voter_key = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=now_cn)
+
+    __table_args__ = (
+        UniqueConstraint("voter_key", "world_name", name="uq_world_votes_voter_world"),
+    )

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 
@@ -40,16 +40,26 @@ class Token(BaseModel):
 
 # ===== 角色相关 =====
 class CharacterCreate(BaseModel):
-    """角色创建"""
+    """角色创建
+
+    age 下限只对自定义角色生效（守 18 岁合规线）；预设角色沿用原著年龄，
+    贾宝玉 15 岁、哪吒 12 岁这类不能因为年龄校验被挡在门外。
+    """
     name: str
     gender: str
-    age: int = Field(..., ge=18)
+    age: int = Field(..., ge=1)
     rank: str
     background: Optional[str] = None
     novel: str  # 三国演义/水浒传/明代/清代
     timeline: str
     character_type: str  # preset/custom
     starting_points: int = 0
+
+    @model_validator(mode="after")
+    def _age_gate(self):
+        if self.character_type != "preset" and self.age < 18:
+            raise ValueError("自定义角色年龄需满 18 岁")
+        return self
 
 
 class CharacterInfo(BaseModel):

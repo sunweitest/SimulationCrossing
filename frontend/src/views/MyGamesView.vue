@@ -136,7 +136,13 @@ const worldImageMap = {
   '清代': '/images/covers/qingdai.webp',
   '西游记': '/images/covers/xiyou.webp',
   '金瓶梅': '/images/covers/jinpingmei.webp',
-  '废土末世': '/images/covers/wasteland.webp'
+  '废土末世': '/images/covers/wasteland.webp',
+  '红楼梦': '/images/covers/hongloumeng.webp',
+  '封神演义': '/images/covers/fengshen.webp',
+  '武侠江湖': '/images/covers/wuxia.webp',
+  '仙侠修真': '/images/covers/xianxia.webp',
+  '大唐长安·天宝末年': '/images/covers/datang.webp',
+  '北宋汴京之变': '/images/covers/bianjing.webp'
 }
 
 const getWorldImage = (novel) => worldImageMap[novel] || worldImageMap['三国演义']
@@ -183,8 +189,14 @@ const continueGame = async (sessionId) => {
   }
 }
 
-onMounted(() => {
-  gameStore.listSessions()
+onMounted(async () => {
+  try {
+    await gameStore.listSessions()
+  } catch (err) {
+    // 不吞错：给用户可见提示，避免页面永远停在“加载中”
+    error.value = '存档列表加载失败，请刷新页面重试'
+    setTimeout(() => { error.value = '' }, 5000)
+  }
 })
 </script>
 
