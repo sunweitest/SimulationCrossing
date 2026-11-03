@@ -52,6 +52,7 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useGameStore } from '@/stores/game'
 
 const router = useRouter()
 const route = useRoute()
@@ -70,7 +71,14 @@ const goAfterAuth = () => {
   const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
   // 只接受站内路径，避免被外部链接当跳板
   const safe = redirect.startsWith('/') && !redirect.startsWith('//')
-  router.push(safe ? redirect : '/character-create')
+  if (safe) {
+    router.replace(redirect)
+    return
+  }
+  // 没有回跳地址时，如果刚才正在玩某一局，直接接着玩，而不是从头创建角色
+  const gameStore = useGameStore()
+  const sid = gameStore.currentSession?.id
+  router.replace(sid ? `/game/${sid}` : '/character-create')
 }
 
 const handleLogin = async () => {

@@ -983,11 +983,12 @@ class DeepSeekProvider(LLMProvider):
 只输出一个 JSON，不要解释：
 {{"advance": true/false, "stage_done": true/false, "setback": true/false, "note": "20字以内"}}
 
-判定规则：
-- stage_done：剧情里是否已经出现了「{stage.get('name', '')}」所描述的结果。出现了就是 true，哪怕之后还有麻烦、还有代价，也判 true。
-- advance：明显朝这个结果前进（拿到东西、清掉障碍、说服关键人、走到目的地），但结果还没完全达成。
+判定规则（这是游戏，不是现实，判定从宽、节奏从快）：
+- stage_done：只要剧情里出现了「{stage.get('name', '')}」所描述的结果——东西到手、话说出口、人到了、事办成了——就判 true。不要因为"还有后续麻烦""还不够稳妥"而判 false。
+- advance：朝这个结果明显前进了一步，但结果还差一口气。
 - setback：损失了时间、人、物资、信誉，或者暴露了行踪。
 - 三者可以并存，例如 stage_done=true 且 setback=true。
+- 宁可判进，不要判滞。玩家需要看到进展，而不是反复磨同一件事。
 - note 只写这一步实际发生了什么，不要复述剧情。"""
 
         try:

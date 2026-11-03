@@ -724,8 +724,9 @@ const startGame = async () => {
       starting_points: characterSource.starting_points
     }
 
-    await gameStore.createGameSession(characterData)
-    router.push('/game')
+    const session = await gameStore.createGameSession(characterData)
+    // 必须把 id 带进 URL：否则刷新页面 / 登录回跳都会丢掉会话，被守卫打回主界面
+    router.replace(`/game/${session.id}`)
   } catch (err) {
     error.value = formatApiError(err)
   } finally {

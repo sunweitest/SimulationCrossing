@@ -245,6 +245,7 @@ class GameService:
             "days_left": deadline,
             "turns_used": 0,
             "penalty": 0,
+            "stage_progress": 0,    # 当前阶段累计推进次数（两次明显推进视为完成）
             "status": "active",     # active / done / failed
             "last_label": "",       # 推进 / 停滞 / 恶化
             "last_note": "",
@@ -273,10 +274,20 @@ class GameService:
         setback = bool(upd.get("setback"))
         note = str(upd.get("note") or "")[:60]
 
+        # 节奏兜底：同一阶段累计两次明显推进就算完成。
+        # 模型判 stage_done 偏保守时，玩家也不会一直磨在同一件事上。
+        if advance and not stage_done:
+            ms["stage_progress"] = int(ms.get("stage_progress") or 0) + 1
+            if ms["stage_progress"] >= 2:
+                stage_done = True
+                note = (note + "（推进到位）") if note else "推进到位"
+        elif stage_done:
+            ms["stage_progress"] = 0
+
         ms["turns_used"] = int(ms.get("turns_used") or 0) + 1
         if setback:
             # 代价上限 = 期限的 1/3，避免连续恶化把使命直接烧穿
-            penalty_cap = max(1, int(ms.get("deadline_turns") or 12) // 3)
+            penalty_cap = 2  # 最多额外烧 2 回合，避免连续恶化把一局直接烧死
             ms["penalty"] = min(int(ms.get("penalty") or 0) + 1, penalty_cap)
         ms["days_left"] = max(
             0,
@@ -287,6 +298,7 @@ class GameService:
             idx = int(ms.get("stage_index") or 0)
             if idx < len(stages):
                 ms["stage_index"] = idx + 1
+                ms["stage_progress"] = 0
                 result["points"] += 10
                 result["achievements"].append(f"阶段达成：{stages[idx].get('name', '')}")
                 ms["log"].append({"turn": ms["turns_used"], "stage": stages[idx].get("name", ""), "note": note})

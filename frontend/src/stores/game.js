@@ -56,11 +56,21 @@ export const useGameStore = defineStore('game', () => {
 
       if (!response.ok) {
         let detail = '执行行动失败'
+        // body 只能读一次：先 json() 再 text() 会抛
+        // "Failed to execute 'text' on 'Response': body stream already read"
+        let raw = ''
         try {
-          const errorBody = await response.json()
-          detail = errorBody.detail || detail
+          raw = await response.text()
         } catch {
-          detail = await response.text()
+          raw = ''
+        }
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw)
+            detail = parsed.detail || parsed.message || raw
+          } catch {
+            detail = raw
+          }
         }
         const error = new Error(typeof detail === 'string' ? detail : detail.message || '执行行动失败')
         error.response = { status: response.status, data: { detail } }

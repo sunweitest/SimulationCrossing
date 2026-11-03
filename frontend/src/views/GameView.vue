@@ -1,5 +1,5 @@
 <template>
-  <div class="game-immersive">
+  <div class="game-immersive" :class="{ 'has-mission': !!mission }">
     <!-- ===== 全屏背景层 ===== -->
     <div
       class="game-bg"
@@ -112,8 +112,17 @@
       </div>
     </div>
 
+    <!-- 加载失败 -->
+    <div v-if="loadFailed && !currentScene" class="initial-hint">
+      <p class="load-failed-text">{{ error }}</p>
+      <div class="load-failed-actions">
+        <button class="load-failed-btn" @click="goMyGames">去我的游戏</button>
+        <button class="load-failed-btn ghost" @click="backToHome">回到主界面</button>
+      </div>
+    </div>
+
     <!-- 无场景（初始加载） -->
-    <div v-if="!currentScene && !gameStore.isGenerating" class="initial-hint">
+    <div v-else-if="!currentScene && !gameStore.isGenerating" class="initial-hint">
       <p>加载游戏中...</p>
     </div>
 
@@ -248,9 +257,10 @@
             <button @click="showSidebar = false; openTurns()" class="sidebar-link">
               ⏪ 回到之前的回合
             </button>
-            <button @click="newGame" class="sidebar-link sidebar-link-danger">
-              重新开始游戏
+            <button @click="backToHome" class="sidebar-link">
+              ← 回到主界面
             </button>
+            <p class="sidebar-hint">进度已自动保存，可在「我的游戏」继续</p>
           </div>
         </div>
       </div>
@@ -289,6 +299,7 @@ const customAction = ref('')
 const actionTextarea = ref(null)
 const error = ref('')
 const needsLogin = ref(false)
+const loadFailed = ref(false)
 
 // 登录用户次数用完 → 弹窗引导充值
 const QQ_NUMBER = '1306344250'
@@ -497,9 +508,14 @@ onMounted(async () => {
     try {
       await gameStore.loadExistingSession(Number(sessionId))
     } catch (err) {
-      error.value = '无法加载游戏会话，会话可能不存在或无权访问'
+      // 会话不存在或已被别人认领：给出口，不要卡在空白页
+      error.value = '这个存档加载不了，可能已被删除或不属于当前账号'
+      loadFailed.value = true
       return
     }
+  } else if (gameStore.currentSession?.id) {
+    // 路由里没有 id（旧链接 / 登录回跳）：补进 URL，刷新才能继续
+    router.replace(`/game/${gameStore.currentSession.id}`)
   }
 
   if (!gameStore.currentSession) {
@@ -524,12 +540,8 @@ const performAction = async (action) => {
   streamStatus.value = 'AI正在生成剧情...'
 
   try {
-    displayedScene.value = ''
-    gameStore.currentSession.current_scene = {
-      scene_description: '',
-      choices: [],
-      game_update: { points_awarded: 0, new_achievement: '' }
-    }
+    // 保留上一段剧情直到新内容到达：中途失败也不会变成空白页
+    let firstChunk = false
 
     const scene = await gameStore.performActionStream(action, {
       onStatus: (status) => {
@@ -539,6 +551,10 @@ const performAction = async (action) => {
         }
       },
       onStoryChunk: (delta) => {
+        if (!firstChunk) {
+          firstChunk = true
+          displayedScene.value = ''
+        }
         displayedScene.value += delta
       },
       onScene: (scenePayload) => {
@@ -606,11 +622,14 @@ const performCustomAction = () => {
   }
 }
 
-const newGame = () => {
-  if (confirm('确定要重新开始游戏吗？当前进度将丢失。')) {
-    gameStore.resetGame()
-    router.push('/character-create')
-  }
+// 回到主界面：进度本来就已存库，这里只离开对局，不弹确认、不清会话
+const goMyGames = () => {
+  router.push(authStore.isAuthenticated ? '/my-games' : { path: '/login', query: { redirect: route.fullPath } })
+}
+
+const backToHome = () => {
+  showSidebar.value = false
+  router.push('/character-create')
 }
 </script>
 
@@ -1293,8 +1312,13 @@ const newGame = () => {
 @media (max-aspect-ratio: 4/3) {
   .story-overlay {
     width: 85vw;
-    height: 48vh;
+    height: 46vh;
     padding: 16px 18px;
+  }
+  .has-mission .story-overlay {
+    top: auto; /* 交给 bottom 定位，别盖住底部行动区 */
+    height: auto;
+    max-height: calc(100vh - var(--top-bar-h, 96px) - var(--bottom-bar-h, 170px) - 24px);
   }
   .story-text {
     font-size: 0.95rem;
@@ -1354,6 +1378,44 @@ const newGame = () => {
   }
   .turns-modal { width: 94vw; max-height: 86vh; }
 }
+/* 有使命条时把剧情面板整体下移，避免压住第一行文字（仅桌面；
+   手机端由下面的 bottom 定位规则接管，不能设 top，否则会压到底部行动区） */
+@media (min-width: 601px) {
+  .has-mission .story-overlay {
+    top: calc(50% + 20px);
+  }
+}
+
+/* ===== 加载失败 ===== */
+.load-failed-text {
+  max-width: 78vw;
+  margin-bottom: 14px;
+  color: #e8dcc6;
+  line-height: 1.7;
+}
+.load-failed-actions { display: flex; gap: 10px; justify-content: center; }
+.load-failed-btn {
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 178, 108, 0.5);
+  background: rgba(214, 178, 108, 0.16);
+  color: #f0e2c4;
+  font-size: 13px;
+  cursor: pointer;
+}
+.load-failed-btn.ghost {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #cfc6b6;
+}
+.sidebar-hint {
+  margin: 6px 0 0;
+  padding: 0 12px;
+  font-size: 11.5px;
+  color: rgba(240, 230, 211, 0.45);
+  line-height: 1.5;
+}
+
 /* ===== 使命条 ===== */
 .mission-bar {
   position: absolute;

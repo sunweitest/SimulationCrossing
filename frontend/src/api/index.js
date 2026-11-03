@@ -24,7 +24,10 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      // 带上当前地址，登录后能回到刚才那一局，而不是丢回首页
+      const here = window.location.pathname + window.location.search
+      const target = here.startsWith('/login') ? '/login' : `/login?redirect=${encodeURIComponent(here)}`
+      window.location.href = target
     }
     return Promise.reject(error)
   }
