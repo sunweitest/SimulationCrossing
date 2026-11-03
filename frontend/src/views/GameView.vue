@@ -92,6 +92,31 @@
       </div>
     </Transition>
 
+    <!-- 登录用户次数用完：弹窗引导充值 -->
+    <Transition name="fade">
+      <div v-if="showQuotaModal" class="quota-modal-mask" @click.self="showQuotaModal = false">
+        <div class="quota-modal">
+          <div class="quota-modal-icon">⏳</div>
+          <h3>今天的次数用完了</h3>
+          <p class="quota-modal-desc">
+            免费次数每天 0 点自动恢复。<br>
+            想现在继续，可联系作者开通次数。
+          </p>
+          <div class="quota-modal-qq">
+            <span class="qq-label">作者 QQ</span>
+            <span class="qq-number">{{ QQ_NUMBER }}</span>
+          </div>
+          <p class="quota-modal-tip">
+            {{ qqCopied ? 'QQ 号已复制，去 QQ 搜索添加即可' : '加好友时备注「小说充值」，作者会尽快回复' }}
+          </p>
+          <div class="quota-modal-actions">
+            <button class="btn-copy-qq" @click="copyQQ">{{ qqCopied ? '✅ 已复制' : '复制 QQ 号' }}</button>
+            <button class="btn-later" @click="showQuotaModal = false">明天再说</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- ===== 侧边栏（滑出） ===== -->
     <Transition name="panel-slide">
       <div v-if="showSidebar" class="sidebar-panel" @click.self="showSidebar = false">
@@ -184,6 +209,26 @@ const customAction = ref('')
 const actionTextarea = ref(null)
 const error = ref('')
 const needsLogin = ref(false)
+
+// 登录用户次数用完 → 弹窗引导充值
+const QQ_NUMBER = '1306344250'
+const showQuotaModal = ref(false)
+const qqCopied = ref(false)
+const copyQQ = async () => {
+  try {
+    await navigator.clipboard.writeText(QQ_NUMBER)
+  } catch (e) {
+    // 非 https 或旧浏览器：退化到选中文本复制
+    const el = document.createElement('textarea')
+    el.value = QQ_NUMBER
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+  }
+  qqCopied.value = true
+  setTimeout(() => { qqCopied.value = false }, 3000)
+}
 const displayedScene = ref('')
 const achievementToast = ref(null)
 const isAwaitingOptions = ref(false)
@@ -343,8 +388,17 @@ const performAction = async (action) => {
     }
   } catch (err) {
     if (err.response?.status === 429) {
-      error.value = err.response.data.detail.message || '今日次数已用完'
-      needsLogin.value = err.response.data.detail.needs_login
+      const detail = err.response.data.detail || {}
+      if (detail.needs_login) {
+        // 游客：提示登录
+        error.value = detail.message || '今日免费次数已用完，请登录继续'
+        needsLogin.value = true
+      } else {
+        // 已登录：弹窗引导充值，不再用 toast
+        error.value = ''
+        needsLogin.value = false
+        showQuotaModal.value = true
+      }
     } else {
       const detail = err.response?.data?.detail
       error.value = typeof detail === 'string' ? detail : detail?.message || err.message || '执行行动失败'
@@ -662,6 +716,81 @@ const newGame = () => {
 }
 
 /* ===== 错误提示 ===== */
+/* 次数用完弹窗 */
+.quota-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(2px);
+}
+.quota-modal {
+  width: 100%;
+  max-width: 340px;
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 24px 20px 18px;
+  text-align: center;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(160deg, #2b2f3a, #1d2029);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  color: #e8e6e3;
+}
+.quota-modal-icon { font-size: 2rem; margin-bottom: 6px; }
+.quota-modal h3 {
+  margin: 0 0 10px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #f5f2ec;
+}
+.quota-modal-desc {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+  line-height: 1.85;
+  color: #cdc9c3;
+  text-wrap: pretty;
+}
+.quota-modal-qq {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+.qq-label { font-size: 0.82rem; color: #a8a49e; }
+.qq-number {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #ffd479;
+  user-select: all;
+}
+.quota-modal-tip { margin: 0 0 16px; font-size: 0.81rem; line-height: 1.6; color: #a6a29a; }
+.quota-modal-actions { display: flex; gap: 10px; }
+.quota-modal-actions button {
+  flex: 1;
+  padding: 11px 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: opacity 0.2s, background 0.2s;
+}
+.btn-copy-qq { background: #c9a227; color: #1d2029; font-weight: 600; }
+.btn-copy-qq:hover { opacity: 0.9; }
+.btn-later { background: rgba(255, 255, 255, 0.1); color: #d5d3cf; }
+.btn-later:hover { background: rgba(255, 255, 255, 0.16); }
+
 .error-toast {
   position: fixed;
   top: 60px;
