@@ -817,6 +817,8 @@ const backToHome = () => {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 5;
+  display: flex;
+  flex-direction: column;
   width: 70vw;
   max-width: 900px;
   height: 55vh;
@@ -833,8 +835,13 @@ const backToHome = () => {
 }
 
 .story-text {
-  height: 100%;
+  /* 用 flex 占满浮层：浮层高度被 max-height 夹住时文字区自动收缩并可滚动，
+     不再把整段文字顶出屏幕（移动端曾整块无法滑动） */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   font-size: 1.1rem;
   line-height: 1.85;
   letter-spacing: 1.5px;
@@ -1413,7 +1420,10 @@ const backToHome = () => {
 
 /* ===== 移动端：剧情框夹在顶栏与行动栏之间，最后一行不会被遮住 ===== */
 @media (max-width: 820px) {
-  .story-overlay {
+  /* .has-mission 那条规则特异性更高，必须一起写上，否则 top:auto 会盖掉这里的
+     top/bottom 定位，浮层高度变回内容高度，文字区就滚不动了 */
+  .story-overlay,
+  .has-mission .story-overlay {
     top: calc(var(--top-bar-h, 52px) + 8px);
     bottom: calc(var(--bottom-bar-h, 170px) + 8px);
     left: 3vw;
