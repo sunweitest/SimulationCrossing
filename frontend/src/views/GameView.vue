@@ -1443,6 +1443,20 @@ const backToHome = () => {
   .bottom-bar {
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
+  /* 选项按钮：手机上一律整行、允许折行。原来是 nowrap 药丸，长选项把按钮
+     撑到屏幕外，文字在最右边被硬切（截图里“也要清…”“顺藤摸瓜…”就是这样） */
+  .action-buttons {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+  .action-btn {
+    width: 100%;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.5;
+    letter-spacing: 0.5px;
+    padding: 8px 14px;
+  }
   .turns-modal { width: 94vw; max-height: 86vh; }
 }
 /* 有使命条时把剧情面板整体下移，避免压住第一行文字（仅桌面；
