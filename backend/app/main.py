@@ -58,10 +58,74 @@ async def lifespan(app: FastAPI):
 
 
 # 创建应用实例
+API_DESCRIPTION = """
+互动小说游戏后端。玩家选择一个世界（三国、红楼、废土……）与一个时间节点，
+以某个角色（预设或自定义）穿越进去，每一回合提交一个行动，模型生成剧情、选项与判定。
+
+## 认证
+
+- 大部分游戏接口对游客开放，登录后存档会绑定到账号。
+- 需要登录的接口在本文档中用锁标记；请求头：`Authorization: Bearer <access_token>`，
+  令牌由 `/api/auth/register` 或 `/api/auth/login` 返回。
+- 管理后台接口需要 `X-Admin-Key` 请求头。
+
+## 时间与时区
+
+所有业务时间按 **Asia/Shanghai (UTC+8)** 计算，每日配额在北京时间 0 点重置。
+
+## 配额
+
+| 身份 | 每日次数 | 说明 |
+| --- | --- | --- |
+| 游客 | 5 次/天 | 按客户端 IP 计 |
+| 登录用户 | 8 次/天 | 按账号计 |
+
+调用 `/api/game/quota` 查询剩余次数；只有成功产生剧情（响应码 < 400）才计一次。
+额外次数与包月不限次优先于每日额度消耗。
+
+## 流式接口
+
+`POST /api/game/action/stream` 返回 `text/event-stream`，事件依次为
+`status` → `story_chunk`(多次) → `status` → `scene` → `done`，出错时可能提前出现 `error`。
+前端应以 `scene` 事件为准，不要用拼接的增量文本覆盖完整场景。
+
+## 通用错误码
+
+| 状态码 | 含义 |
+| --- | --- |
+| 400 | 参数语义错误（如注册未同意条款、重复邮箱） |
+| 401 | 未登录或令牌失效 |
+| 403 | 无权访问该存档（归属校验） |
+| 404 | 资源不存在 |
+| 409 | 对局已结束（主角死亡） |
+| 422 | 请求体校验失败（字段缺失、超长、类型错误） |
+| 429 | 今日次数用尽或触发限流 |
+| 500 | 服务端异常（LLM 不可用时已配置自动切换） |
+
+## 内容来源
+
+世界、角色、时间节点、使命的**唯一来源**是仓库中的 `content/worlds/*.json`，
+通过 `scripts/import_content.py` 导入数据库。管理后台的增删改会被下次导入覆盖，
+线上内容请改 JSON。
+"""
+
+OPENAPI_TAGS = [
+    {"name": "认证", "description": "注册、登录、发放令牌。"},
+    {"name": "游戏", "description": "开局、行动、存档读取、回溯。核心玩法接口。"},
+    {"name": "社区", "description": "世界点击、投票、天梯榜。均为公开接口。"},
+    {"name": "自定义角色", "description": "玩家私有的自定义角色，仅创建者本人可见。"},
+    {"name": "管理后台", "description": "内容与用户管理，需要 `X-Admin-Key` 请求头。"},
+    {"name": "系统", "description": "健康检查与元信息。"},
+]
+
 app = FastAPI(
-    title=settings.APP_NAME,
+    title="穿越模拟 · 互动小说 API",
+    description=API_DESCRIPTION,
     version=settings.VERSION,
-    lifespan=lifespan
+    contact={"name": "SimulationCrossing", "url": "https://wanchuanyue.com"},
+    license_info={"name": "AGPL-3.0", "url": "https://www.gnu.org/licenses/agpl-3.0.html"},
+    openapi_tags=OPENAPI_TAGS,
+    lifespan=lifespan,
 )
 
 # 配置CORS
@@ -84,9 +148,12 @@ app.include_router(community.router)
 app.include_router(custom_characters.router)
 
 
-@app.get("/")
+@app.get("/", tags=["系统"], summary="服务元信息")
 async def root():
-    """根路径"""
+    """返回服务名、版本与文档地址，可用于探活。
+
+    根路径不触达数据库，只做常量返回。
+    """
     return {
         "message": "AI Interactive Novel Game API",
         "version": settings.VERSION,
@@ -94,7 +161,11 @@ async def root():
     }
 
 
-@app.get("/health")
+@app.get("/health", tags=["系统"], summary="健康检查")
 async def health_check():
-    """健康检查"""
+    """健康检查，供负载均衡 / 监控探活。
+
+- **返回**：`{"status": "ok"}`
+- **说明**：只表示进程可响应，不校验数据库与 Redis；需要深度检查请结合业务接口。
+"""
     return {"status": "ok"}

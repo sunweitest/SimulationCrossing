@@ -54,7 +54,8 @@ def _get_redis():
 
 
 async def _verify_admin(x_admin_key: str = Header(...)):
-    """验证管理后台密钥"""
+    """验证管理后台密钥
+    """
     if x_admin_key != settings.ADMIN_KEY:
         raise HTTPException(status_code=403, detail="无效的管理密钥")
     return True
@@ -65,19 +66,26 @@ def _extra_quota_key(user_id: int) -> str:
 
 
 def _unlimited_key(user_id: int) -> str:
-    """包月不限次数标记，30 天过期"""
+    """包月不限次数标记，30 天过期
+    """
     return f"rate_limit:user:{user_id}:unlimited"
 
 
 # ── 用户查询 ──────────────────────────────────────────────
 
-@router.get("/lookup")
+@router.get("/lookup", summary="按邮箱/手机号查用户")
 async def lookup_user(
     q: str,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """根据邮箱或手机号查找用户"""
+    """
+    管理后台：精确查找用户及其配额状态。
+
+    - **权限**：`X-Admin-Key` 头必须与 `ADMIN_KEY` 一致
+    - **参数**：`q` 邮箱或手机号
+    - **错误**：`401` 管理密钥错误；`404` 用户不存在
+    """
     result = await db.execute(
         select(User).where((User.email == q) | (User.phone == q))
     )
@@ -107,7 +115,7 @@ async def lookup_user(
 
 # ── 用户列表 ──────────────────────────────────────────────
 
-@router.get("/users")
+@router.get("/users", summary="用户列表")
 async def list_users(
     q: Optional[str] = Query(None, description="按邮箱/手机号模糊搜索"),
     page: int = Query(1, ge=1),
@@ -115,7 +123,13 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """用户列表（分页 + 关键字过滤），附带额外配额、包月状态与会话数"""
+    """
+    分页 + 关键字过滤的用户列表。
+
+    - **权限**：`X-Admin-Key`
+    - **参数**：`page`（默认 1）、`size`（默认 20）、`q` 模糊匹配邮箱/手机号
+    - **返回**：用户列表（含额外次数、包月不限、会话数）与总数
+    """
     cond = None
     if q and q.strip():
         kw = f"%{q.strip()}%"
@@ -168,14 +182,20 @@ async def list_users(
 
 # ── 追加次数 ──────────────────────────────────────────────
 
-@router.post("/add-quota")
+@router.post("/add-quota", summary="追加次数")
 async def add_quota(
     user_id: int,
     amount: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """给指定用户追加额外次数"""
+    """
+    给用户增加额外可用次数（Redis 计数，按月失效）。
+
+    - **权限**：`X-Admin-Key`
+    - **请求体**：`identifier`、`count`
+    - **错误**：`404` 用户不存在
+    """
     if amount <= 0:
         raise HTTPException(status_code=400, detail="次数必须大于0")
 
@@ -203,13 +223,18 @@ async def add_quota(
 
 # ── 包月不限次数 ──────────────────────────────────────────
 
-@router.post("/monthly-unlimited")
+@router.post("/monthly-unlimited", summary="开通本月不限次")
 async def set_monthly_unlimited(
     user_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """给指定用户开通本月不限次数"""
+    """
+    给用户标记本月不限次数。
+
+    - **权限**：`X-Admin-Key`
+    - **请求体**：`identifier`
+    """
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -233,13 +258,18 @@ async def set_monthly_unlimited(
     }
 
 
-@router.delete("/monthly-unlimited")
+@router.delete("/monthly-unlimited", summary="取消本月不限次")
 async def cancel_monthly_unlimited(
     user_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """取消用户的本月不限次数"""
+    """
+    取消用户的本月不限次数标记。
+
+    - **权限**：`X-Admin-Key`
+    - **参数**：`identifier` 查询参数
+    """
     user = await db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -257,9 +287,14 @@ async def cancel_monthly_unlimited(
 # 小说/历史背景 CRUD
 # ═══════════════════════════════════════════════════════════════
 
-@router.get("/novels", response_model=list[NovelResponse])
+@router.get("/novels", response_model=list[NovelResponse], summary="小说列表")
 async def list_novels(db: AsyncSession = Depends(get_db), _: bool = Depends(_verify_admin)):
-    """列出所有小说"""
+    """
+    管理后台的世界列表。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`NovelResponse[]`（含时间节点）
+    """
     result = await db.execute(
         select(NovelConfig)
         .options(selectinload(NovelConfig.timelines))
@@ -280,13 +315,20 @@ async def list_novels(db: AsyncSession = Depends(get_db), _: bool = Depends(_ver
     ]
 
 
-@router.post("/novels", response_model=NovelResponse, status_code=201)
+@router.post("/novels", response_model=NovelResponse, status_code=201, summary="新建小说")
 async def create_novel(
     data: NovelCreate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """创建小说"""
+    """
+    新增一个世界。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`201` + `NovelResponse`
+    - **错误**：`400` 同名世界已存在
+    - **注意**：线上内容以 `content/worlds/*.json` 为准，后台改动会被下次导入覆盖
+    """
     existing = await db.execute(select(NovelConfig).where(NovelConfig.name == data.name))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="该小说名称已存在")
@@ -300,13 +342,17 @@ async def create_novel(
     )
 
 
-@router.get("/novels/{novel_id}", response_model=NovelResponse)
+@router.get("/novels/{novel_id}", response_model=NovelResponse, summary="小说详情")
 async def get_novel(
     novel_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """获取小说详情（含时间节点列表）"""
+    """
+    按 id 取世界及其时间节点。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     result = await db.execute(
         select(NovelConfig).options(selectinload(NovelConfig.timelines)).where(NovelConfig.id == novel_id)
     )
@@ -322,14 +368,18 @@ async def get_novel(
     )
 
 
-@router.put("/novels/{novel_id}", response_model=NovelResponse)
+@router.put("/novels/{novel_id}", response_model=NovelResponse, summary="更新小说")
 async def update_novel(
     novel_id: int,
     data: NovelUpdate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """更新小说"""
+    """
+    修改世界名称/描述/排序/封面。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     result = await db.execute(
         select(NovelConfig).options(selectinload(NovelConfig.timelines)).where(NovelConfig.id == novel_id)
     )
@@ -353,13 +403,18 @@ async def update_novel(
     )
 
 
-@router.delete("/novels/{novel_id}")
+@router.delete("/novels/{novel_id}", summary="删除小说")
 async def delete_novel(
     novel_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """删除小说（级联删除关联的时间节点；如有角色引用则拒绝）"""
+    """
+    删除世界，级联删除其时间节点。
+
+    - **权限**：`X-Admin-Key`
+    - **错误**：`400` 仍有角色引用该世界；`404` 不存在
+    """
     result = await db.execute(select(NovelConfig).where(NovelConfig.id == novel_id))
     novel = result.scalar_one_or_none()
     if not novel:
@@ -385,13 +440,18 @@ async def delete_novel(
 # 时间节点 CRUD
 # ═══════════════════════════════════════════════════════════════
 
-@router.get("/timelines", response_model=list[TimelineResponse])
+@router.get("/timelines", response_model=list[TimelineResponse], summary="时间节点列表")
 async def list_timelines(
     novel_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """列出某小说的所有时间节点"""
+    """
+    某个世界下的时间节点。
+
+    - **权限**：`X-Admin-Key`
+    - **参数**：`novel` 世界名
+    """
     result = await db.execute(
         select(TimelineConfig)
         .where(TimelineConfig.novel_id == novel_id)
@@ -407,13 +467,18 @@ async def list_timelines(
     ]
 
 
-@router.post("/timelines", response_model=TimelineResponse, status_code=201)
+@router.post("/timelines", response_model=TimelineResponse, status_code=201, summary="新建时间节点")
 async def create_timeline(
     data: TimelineCreate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """创建时间节点"""
+    """
+    给某个世界加一个时间节点。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`201` + `TimelineResponse`
+    """
     # 验证小说存在
     novel = await db.get(NovelConfig, data.novel_id)
     if not novel:
@@ -440,14 +505,18 @@ async def create_timeline(
     )
 
 
-@router.put("/timelines/{timeline_id}", response_model=TimelineResponse)
+@router.put("/timelines/{timeline_id}", response_model=TimelineResponse, summary="更新时间节点")
 async def update_timeline(
     timeline_id: int,
     data: TimelineUpdate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """更新时间节点"""
+    """
+    修改时间节点的背景/排序。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     timeline = await db.get(TimelineConfig, timeline_id)
     if not timeline:
         raise HTTPException(status_code=404, detail="时间节点不存在")
@@ -467,13 +536,18 @@ async def update_timeline(
     )
 
 
-@router.delete("/timelines/{timeline_id}")
+@router.delete("/timelines/{timeline_id}", summary="删除时间节点")
 async def delete_timeline(
     timeline_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """删除时间节点（如有角色引用则拒绝）"""
+    """
+    删除时间节点。
+
+    - **权限**：`X-Admin-Key`
+    - **错误**：`400` 仍有角色引用；`404` 不存在
+    """
     timeline = await db.get(TimelineConfig, timeline_id)
     if not timeline:
         raise HTTPException(status_code=404, detail="时间节点不存在")
@@ -492,7 +566,7 @@ async def delete_timeline(
 # 预设角色 CRUD
 # ═══════════════════════════════════════════════════════════════
 
-@router.get("/characters", response_model=list[PresetCharacterAdminResponse])
+@router.get("/characters", response_model=list[PresetCharacterAdminResponse], summary="预设角色列表（管理）")
 async def list_admin_characters(
     novel: Optional[str] = None,
     timeline: Optional[str] = None,
@@ -500,7 +574,12 @@ async def list_admin_characters(
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """列出预设角色（管理后台用，含完整时间线条目）"""
+    """
+    管理后台用的角色列表，含完整时间线条目。
+
+    - **权限**：`X-Admin-Key`
+    - **参数**：`novel`、`timeline` 可选过滤
+    """
     stmt = select(PresetCharacter).options(selectinload(PresetCharacter.timelines))
     if novel:
         stmt = stmt.where(PresetCharacter.novel == novel)
@@ -529,13 +608,19 @@ async def list_admin_characters(
     ]
 
 
-@router.post("/characters", response_model=PresetCharacterAdminResponse, status_code=201)
+@router.post("/characters", response_model=PresetCharacterAdminResponse, status_code=201, summary="新建预设角色")
 async def create_admin_character(
     data: PresetCharacterAdminCreate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """创建预设角色（含时间线条目）"""
+    """
+    创建角色并一次性写入其时间线条目。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`201` + `PresetCharacterAdminResponse`
+    - **错误**：`400` 同名角色在该世界已存在
+    """
     char = PresetCharacter(
         novel=data.novel, name=data.name,
         gender=data.gender, age=data.age, rank=data.rank,
@@ -559,13 +644,17 @@ async def create_admin_character(
     )
 
 
-@router.get("/characters/{char_id}", response_model=PresetCharacterAdminResponse)
+@router.get("/characters/{char_id}", response_model=PresetCharacterAdminResponse, summary="角色详情（管理）")
 async def get_admin_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """获取单个角色详情"""
+    """
+    按 id 取角色及时间线条目。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     result = await db.execute(
         select(PresetCharacter).options(selectinload(PresetCharacter.timelines)).where(PresetCharacter.id == char_id)
     )
@@ -583,14 +672,18 @@ async def get_admin_character(
     )
 
 
-@router.put("/characters/{char_id}", response_model=PresetCharacterAdminResponse)
+@router.put("/characters/{char_id}", response_model=PresetCharacterAdminResponse, summary="更新角色（管理）")
 async def update_admin_character(
     char_id: int,
     data: PresetCharacterAdminUpdate,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """更新角色（含时间线条目替换）"""
+    """
+    更新角色字段，`timelines` 为**整体替换**语义。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     result = await db.execute(
         select(PresetCharacter).options(selectinload(PresetCharacter.timelines)).where(PresetCharacter.id == char_id)
     )
@@ -628,13 +721,17 @@ async def update_admin_character(
     )
 
 
-@router.delete("/characters/{char_id}")
+@router.delete("/characters/{char_id}", summary="删除角色（管理）")
 async def delete_admin_character(
     char_id: int,
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """删除角色"""
+    """
+    删除角色及其时间线条目。
+
+    - **权限**：`X-Admin-Key`；`404` 不存在
+    """
     char = await db.get(PresetCharacter, char_id)
     if not char:
         raise HTTPException(status_code=404, detail="角色不存在")
@@ -663,9 +760,15 @@ _XLSX_SAMPLE = [
 ]
 
 
-@router.get("/character-template")
+@router.get("/character-template", summary="下载角色导入模板")
 async def download_character_template(_: bool = Depends(_verify_admin)):
-    """下载角色导入 xlsx 模板"""
+    """
+    下载 xlsx 导入模板（含表头与示例行）。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+    - **错误**：`500` 服务端缺少 openpyxl
+    """
     if not HAS_OPENPYXL:
         raise HTTPException(status_code=500, detail="openpyxl 未安装")
 
@@ -740,13 +843,20 @@ async def download_character_template(_: bool = Depends(_verify_admin)):
     )
 
 
-@router.post("/character-import")
+@router.post("/character-import", summary="批量导入角色")
 async def import_characters(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(_verify_admin),
 ):
-    """上传 xlsx 批量导入角色"""
+    """
+    上传 xlsx 批量创建/更新角色。
+
+    - **权限**：`X-Admin-Key`
+    - **请求**：`multipart/form-data`，字段名 `file`
+    - **返回**：成功/失败计数与逐行错误信息
+    - **错误**：`400` 文件格式不支持；`500` 缺少 openpyxl
+    """
     if not HAS_OPENPYXL:
         raise HTTPException(status_code=500, detail="openpyxl 未安装")
 

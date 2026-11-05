@@ -41,12 +41,47 @@ async def _claim_anonymous_session(db: AsyncSession, game_session: GameSession, 
     logger.info("SESSION_CLAIMED: session_id=%d new_owner=%d", game_session.id, current_user.id)
 
 
+async def _load_owned_session(
+    db: AsyncSession, session_id: int, current_user
+) -> GameSession:
+    """按 id 取存档并校验归属：别人的存档一律 403，游客不读登录用户的存档。
+
+    所有「按 id 取存档」的只读接口都必须走这里。之前各接口各写一遍，
+    漏掉校验就会变成 IDOR（BUG-001）。
+    """
+    result = await db.execute(select(GameSession).where(GameSession.id == session_id))
+    game_session = result.scalar_one_or_none()
+    if not game_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="游戏会话不存在",
+        )
+
+    # 登录用户接手自己登录前的游客存档
+    await _claim_anonymous_session(db, game_session, current_user)
+
+    if game_session.user_id is not None:
+        if current_user is None or game_session.user_id != current_user.id:
+            logger.warning(
+                "SESSION_AUTHZ_DENY: session_id=%d owner=%s requester=%s",
+                session_id,
+                game_session.user_id,
+                current_user.id if current_user else "guest",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权访问此游戏会话",
+            )
+    return game_session
+
+
 def _sse(event: str, data) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 async def _next_turn_index(db: AsyncSession, session_id: int) -> int:
-    """下一回合序号（0 = 开局，之后每次行动 +1）。"""
+    """下一回合序号（0 = 开局，之后每次行动 +1）。
+    """
     result = await db.execute(
         select(func.max(SceneHistory.turn_index)).where(SceneHistory.game_session_id == session_id)
     )
@@ -54,19 +89,29 @@ async def _next_turn_index(db: AsyncSession, session_id: int) -> int:
     return 0 if current_max is None else current_max + 1
 
 
-@router.get("/characters")
+@router.get("/characters", summary="预设角色列表（管理）")
 async def get_available_characters(
     novel: Optional[str] = None,
     timeline: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """获取可用预设角色列表，可按小说和时间节点筛选"""
+    """
+    管理后台用的角色列表，含完整时间线条目。
+
+    - **权限**：`X-Admin-Key`
+    - **参数**：`novel`、`timeline` 可选过滤
+    """
     return await GameService.get_available_characters(db, novel=novel, timeline=timeline)
 
 
-@router.get("/novels", response_model=list[NovelTimelineResponse])
+@router.get("/novels", response_model=list[NovelTimelineResponse], summary="小说列表")
 async def get_novels(db: AsyncSession = Depends(get_db)):
-    """获取所有小说背景及其时间节点（公开接口，供角色创建页使用）"""
+    """
+    管理后台的世界列表。
+
+    - **权限**：`X-Admin-Key`
+    - **返回**：`NovelResponse[]`（含时间节点）
+    """
     result = await db.execute(
         select(NovelConfig)
         .options(selectinload(NovelConfig.timelines))
@@ -84,15 +129,18 @@ async def get_novels(db: AsyncSession = Depends(get_db)):
     ]
 
 
-@router.get("/quota")
+@router.get("/quota", summary="查询今日剩余次数")
 async def get_my_quota(
     request: Request,
     current_user: Optional[User] = Depends(get_current_user),
 ):
-    """查询当前身份今天还能对话几次（游戏界面右上角展示用）
+    """
+    游戏界面右上角「剩 N 次」的数据源。
 
-    未登录：每日 DAILY_FREE_MESSAGES 次，用完提示登录
-    已登录：每日 DAILY_FREE_MESSAGES + DAILY_LOGGED_IN_EXTRA，另有额外配额/包月不限
+    - **权限**：公开（未登录按 IP 计，登录后按账号计）
+    - **返回**：`used_today` / `daily_limit` / `remaining` / `unlimited` / `extra` / `logged_in`
+    - **计费规则**：每日 0 点（Asia/Shanghai）重置；游客 5 次/天，登录 8 次/天；
+      追加次数（`extra`）与包月不限（`unlimited`）优先消耗
     """
     client = redis.Redis(
         host=settings.REDIS_HOST,
@@ -119,13 +167,21 @@ async def get_my_quota(
         await client.aclose()
 
 
-@router.post("/session", response_model=GameSessionResponse)
+@router.post("/session", response_model=GameSessionResponse, summary="创建对局", responses={404: {"description": "世界或时间节点不存在"}})
 async def create_game_session(
     data: GameSessionCreate,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    """创建游戏会话"""
+    """
+    开一局新游戏，生成第一幕并写入存档。
+
+    - **权限**：公开；登录后创建的对局绑定到账号（游客对局 `user_id` 为空）
+    - **请求体**：`character.character_type` 为 `preset` 时按 世界+角色+时间节点 取设定；
+      为 `custom` 时用请求里的 姓名/性别/年龄/身份/背景，并**按背景现拟一条使命**（LLM，失败有兜底）
+    - **返回**：会话 id、角色信息、首幕场景（含选项与使命状态）
+    - **错误**：`404` 世界或时间节点不存在；`422` 参数缺失（预设角色也要求传 gender/age）
+    """
     character = data.character
 
     # 如果是预设角色，获取完整信息
@@ -228,14 +284,35 @@ async def create_game_session(
     return game_session
 
 
-@router.post("/action", response_model=Scene)
+@router.post("/action", response_model=Scene, summary="执行一回合（同步）", responses={403: {"description": "无权访问该存档"}, 409: {"description": "主角已死亡，对局结束"}, 429: {"description": "今日次数用尽"}})
 async def perform_action(
     action_data: UserAction,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    """执行游戏行动"""
+    """
+    提交玩家的行动，同步返回整段剧情。
+
+    适合脚本 / 服务端调用；网页端走 `/action/stream` 拿流式输出。
+
+    - **权限**：本人存档，或未认领的游客存档；别人的存档 `403`
+    - **请求体**：`game_session_id`、`action`（去除首尾空白后 1–200 字）
+    - **副作用**：消耗 1 次配额、写 `scene_history` / `choice_history`、推进使命
+    - **错误**
+      - `422` 行动为空或超长（不消耗次数、不调用模型）
+      - `403` 无权访问；`404` 存档不存在
+      - `409` 主角已死亡，这一局已结束（`detail.ended = true`）
+      - `429` 今日次数用尽
+    """
+    # 空/纯空白行动不消耗次数、不调 LLM（schema 的 min_length 拦不住 "   "）
+    action_text = (action_data.action or "").strip()
+    if not action_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="行动内容不能为空",
+        )
+    action_data.action = action_text
     t_total_start = time.time()
     logger.info("ACTION_START: session_id=%d action=%.40s user=%s",
                 action_data.game_session_id, action_data.action,
@@ -449,14 +526,34 @@ async def perform_action(
     return Scene(**new_scene)
 
 
-@router.post("/action/stream")
+@router.post("/action/stream", summary="执行一回合（SSE 流式）", responses={403: {"description": "无权访问该存档"}, 409: {"description": "主角已死亡，对局结束"}, 429: {"description": "今日次数用尽"}})
 async def perform_action_stream(
     action_data: UserAction,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ):
-    """流式执行游戏行动：先推送纯剧情，再推送选项/积分/成就。"""
+    """
+    网页端使用的流式行动接口，返回 `text/event-stream`。
+
+    - **权限 / 请求体 / 错误**：同 `/action`
+    - **事件序列**
+      1. `status` `{"phase":"story"}` 剧情生成中
+      2. `story_chunk` `{"delta":"..."}` 增量文本（可多次）
+      3. `status` `{"phase":"metadata"}` 生成选项与判定中
+      4. `scene` 完整场景对象（选项、积分、成就、配图、使命状态）
+      5. `done` `{"ok":true}`
+      6. `error` 出错时的 `{"message":"..."}`（已推送的剧情不会被清空）
+    - **注意**：`scene` 事件以整包为准，前端不要用 `story_chunk` 拼出的文本覆盖它
+    """
+    # 空/纯空白行动不消耗次数、不调 LLM（schema 的 min_length 拦不住 "   "）
+    action_text = (action_data.action or "").strip()
+    if not action_text:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="行动内容不能为空",
+        )
+    action_data.action = action_text
     t_total_start = time.time()
     logger.info(
         "ACTION_STREAM_START: session_id=%d action=%.40s user=%s",
@@ -681,14 +778,21 @@ async def perform_action_stream(
     )
 
 
-@router.get("/character/{novel}/{name}")
+@router.get("/character/{novel}/{name}", summary="角色详情")
 async def get_character_detail(
     novel: str,
     name: str,
     timeline: str,
     db: AsyncSession = Depends(get_db)
 ):
-    """获取预设角色详细信息"""
+    """
+    查询某个预设角色在某个时间节点的完整设定。
+
+    - **权限**：公开
+    - **参数**：`novel` 世界名、`name` 角色名；`timeline` 通过查询参数传入，缺省取该角色第一个节点
+    - **返回**：背景、动态背景、可玩节点
+    - **错误**：`404` 角色或节点不存在
+    """
     char_info = await GameService.get_preset_character(db, novel, name, timeline)
     if not char_info:
         raise HTTPException(
@@ -698,13 +802,20 @@ async def get_character_detail(
     return char_info
 
 
-@router.get("/session/{session_id}", response_model=GameSessionResponse)
+@router.get("/session/{session_id}", response_model=GameSessionResponse, summary="读取存档", responses={403: {"description": "无权访问该存档"}})
 async def get_game_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    """获取游戏会话"""
+    """
+    读取一局游戏的完整状态（含当前场景与使命）。
+
+    - **权限**：本人；未认领的游客存档任何人可读（分享/试玩依赖），已归属的存档对他人与游客一律 `403`
+    - **返回**：角色信息、积分、成就、当前场景、使命状态
+    - **错误**：`403` 无权访问；`404` 存档不存在
+    - **说明**：登录用户首次读取自己登录前创建的游客存档时，会**自动认领**到该账号
+    """
     result = await db.execute(
         select(GameSession).where(GameSession.id == session_id)
     )
@@ -727,13 +838,19 @@ async def get_game_session(
     return game_session
 
 
-@router.delete("/session/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/session/{session_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除存档", responses={403: {"description": "无权删除该存档"}})
 async def delete_game_session(
     session_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """删除游戏会话"""
+    """
+    删除一局存档（连带剧情与选项记录）。
+
+    - **权限**：本人；不能删除别人的存档
+    - **返回**：`204` 无响应体
+    - **错误**：`403` 无权删除；`404` 存档不存在
+    """
     result = await db.execute(
         select(GameSession).where(GameSession.id == session_id)
     )
@@ -756,12 +873,17 @@ async def delete_game_session(
     await db.commit()
 
 
-@router.get("/sessions", response_model=list[GameSessionListItem])
+@router.get("/sessions", response_model=list[GameSessionListItem], summary="我的存档列表")
 async def list_game_sessions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """获取当前用户的所有游戏会话"""
+    """
+    「我的游戏」页面用，按最后更新时间倒序。
+
+    - **权限**：登录用户，只返回自己的存档
+    - **返回**：每局的 id、角色、世界、时间节点、积分、成就数、最近一段剧情摘要（80 字）
+    """
     result = await db.execute(
         select(GameSession)
         .where(GameSession.user_id == current_user.id)
@@ -795,23 +917,20 @@ async def list_game_sessions(
     ]
 
 
-@router.get("/session/{session_id}/state", response_model=GameStateResponse)
+@router.get("/session/{session_id}/state", response_model=GameStateResponse, summary="存档统计", responses={403: {"description": "无权访问该存档"}})
 async def get_game_state(
     session_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user)
 ):
-    """获取游戏状态"""
-    result = await db.execute(
-        select(GameSession).where(GameSession.id == session_id)
-    )
-    game_session = result.scalar_one_or_none()
+    """
+    积分 / 成就 / 场景数 / 选择数。
 
-    if not game_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="游戏会话不存在"
-        )
+    - **权限**：同 `/session/{session_id}`
+    - **返回**：`points` / `achievements` / `scene_count` / `choice_count` / `current_scene`
+    - **错误**：`403` 无权访问；`404` 存档不存在
+    """
+    game_session = await _load_owned_session(db, session_id, current_user)
 
     # 统计场景和选择数量
     scene_count_result = await db.execute(
@@ -835,22 +954,20 @@ async def get_game_state(
 
 # ── 角色追踪查询 ──────────────────────────────────────────
 
-@router.get("/session/{session_id}/characters", response_model=CharacterInfoResponse)
+@router.get("/session/{session_id}/characters", response_model=CharacterInfoResponse, summary="角色好感度列表", responses={403: {"description": "无权访问该存档"}})
 async def get_session_characters(
     session_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
-    """获取游戏会话中所有已追踪的角色及其好感度"""
-    result = await db.execute(
-        select(GameSession).where(GameSession.id == session_id)
-    )
-    game_session = result.scalar_one_or_none()
+    """
+    这一局里已追踪的全部 NPC 及好感度。
 
-    if not game_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="游戏会话不存在",
-        )
+    - **权限**：同 `/session/{session_id}`
+    - **返回**：`characters[]`（姓名、身份、好感度、最近互动）与 `last_updated_turn`
+    - **错误**：`403` / `404`
+    """
+    game_session = await _load_owned_session(db, session_id, current_user)
 
     state = game_session.characters_state or {}
     characters = state.get("characters", [])
@@ -862,23 +979,21 @@ async def get_session_characters(
     )
 
 
-@router.get("/session/{session_id}/character/{character_name}")
+@router.get("/session/{session_id}/character/{character_name}", summary="单个角色好感度", responses={403: {"description": "无权访问该存档"}})
 async def get_session_character(
     session_id: int,
     character_name: str,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
-    """按名字查询游戏会话中的特定角色"""
-    result = await db.execute(
-        select(GameSession).where(GameSession.id == session_id)
-    )
-    game_session = result.scalar_one_or_none()
+    """
+    按名字查这一局里的某个 NPC。
 
-    if not game_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="游戏会话不存在",
-        )
+    - **权限**：同 `/session/{session_id}`
+    - **返回**：该角色的 `CharacterEntry`
+    - **错误**：`403` 无权访问；`404` 存档或角色不存在
+    """
+    game_session = await _load_owned_session(db, session_id, current_user)
 
     state = game_session.characters_state or {}
     for char in state.get("characters", []):
@@ -893,13 +1008,19 @@ async def get_session_character(
 
 # ── 回合回溯 ────────────────────────────────────────────────────────────────
 
-@router.get("/session/{session_id}/turns")
+@router.get("/session/{session_id}/turns", summary="回合列表（回溯用）", responses={403: {"description": "无权访问该存档"}})
 async def list_turns(
     session_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ):
-    """列出该会话的所有回合，供「回溯」面板选择。"""
+    """
+    列出所有回合，供「回溯」面板选择。
+
+    - **权限**：同 `/session/{session_id}`
+    - **返回**：`turn_index` / `preview`（70 字）/ `choice` / `points_awarded` / `created_at` / `is_current`
+    - **错误**：`403` / `404`
+    """
     result = await db.execute(select(GameSession).where(GameSession.id == session_id))
     game_session = result.scalar_one_or_none()
     if not game_session:
@@ -934,17 +1055,21 @@ async def list_turns(
     return items
 
 
-@router.post("/session/{session_id}/rewind")
+@router.post("/session/{session_id}/rewind", summary="回溯到某一回合", responses={403: {"description": "无权访问该存档"}})
 async def rewind_session(
     session_id: int,
     payload: RewindRequest,
     db: AsyncSession = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ):
-    """回到第 payload.turn_index 回合：之后的回合记录会被删除。
+    """
+    回到指定回合，**删除其后的所有回合记录**，并恢复当时的场景与使命状态。
 
-    回溯不调用 LLM，因此不消耗次数。积分按被删回合的加分回退，
-    成就按保留下来的回合重新汇总；摘要/人物状态清空，下次压缩时重建。
+    - **权限**：本人存档（游客存档需未被认领）
+    - **请求体**：`turn_index`（目标回合，0 为开局）
+    - **返回**：恢复后的场景
+    - **错误**：`400` 回合不存在或是当前回合；`403` 无权访问；`404` 存档不存在
+    - **说明**：回溯不消耗每日次数
     """
     result = await db.execute(select(GameSession).where(GameSession.id == session_id))
     game_session = result.scalar_one_or_none()

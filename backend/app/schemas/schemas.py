@@ -1,21 +1,33 @@
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 
 
 # ===== 用户相关 =====
 class UserCreate(BaseModel):
+    """注册请求：邮箱与手机号至少提供一个，必须同意条款。"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "email": "player@example.com",
+                "password": "MyPassw0rd",
+                "agree_terms": True,
+            }
+        }
+    )
     """用户注册"""
-    email: Optional[EmailStr] = None
-    phone: Optional[str] = None
-    password: str = Field(..., min_length=6)
+    email: Optional[EmailStr] = Field(None, description="邮箱，与 phone 至少填一个")
+    phone: Optional[str] = Field(None, description="手机号，与 email 至少填一个")
+    password: str = Field(..., min_length=6, description="登录密码，至少 6 位")
     # 必须勾选同意《服务条款》《隐私政策》才能注册
-    agree_terms: bool = False
+    agree_terms: bool = Field(False, description="必须为 true，表示已同意《服务条款》《隐私政策》")
 
 
 class UserLogin(BaseModel):
+    """登录请求。"""
     """用户登录"""
-    identifier: str  # 邮箱或手机号
+    identifier: str = Field(..., description="邮箱或手机号")
     password: str
 
 
@@ -40,19 +52,39 @@ class Token(BaseModel):
 
 # ===== 角色相关 =====
 class CharacterCreate(BaseModel):
+    """开局时的角色设定。
+
+    `character_type` 为 `preset` 时，服务端按 世界+角色名+时间节点 取设定，
+    只信任 name / novel / timeline；为 `custom` 时使用这里填写的全部字段。
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "novel": "废土末世",
+                "name": "林哲",
+                "gender": "男性",
+                "age": 28,
+                "rank": "工程师",
+                "background": "",
+                "timeline": "大断电",
+                "character_type": "preset",
+            }
+        }
+    )
     """角色创建
 
     age 下限只对自定义角色生效（守 18 岁合规线）；预设角色沿用原著年龄，
     贾宝玉 15 岁、哪吒 12 岁这类不能因为年龄校验被挡在门外。
     """
-    name: str
-    gender: str
-    age: int = Field(..., ge=1)
-    rank: str
-    background: Optional[str] = None
-    novel: str  # 三国演义/水浒传/明代/清代
-    timeline: str
-    character_type: str  # preset/custom
+    name: str = Field(..., description="角色名；preset 时必须与预设角色一致")
+    gender: str = Field(..., description="性别")
+    age: int = Field(..., ge=1, description="年龄（自定义角色要求 ≥1，页面默认 ≥18）")
+    rank: str = Field(..., description="身份，如 皇帝 / 士兵 / 丫鬟")
+    background: Optional[str] = Field(None, description="角色背景，自定义角色会据此生成使命")
+    novel: str = Field(..., description="世界名，如 三国演义 / 红楼梦 / 废土末世")
+    timeline: str = Field(..., description="时间节点，需在该世界的时间节点列表内")
+    character_type: str = Field(..., description="preset（预设角色）或 custom（自定义角色）")
     starting_points: int = 0
 
     @model_validator(mode="after")
@@ -84,23 +116,36 @@ class GameUpdate(BaseModel):
 
 class Scene(BaseModel):
     """场景"""
-    scene_description: str
-    choices: List[str]
+    scene_description: str = Field(..., description="本回合剧情全文")
+    choices: List[str] = Field(..., description="系统给出的 3 个行动选项")
     game_update: GameUpdate
-    scene_image: Optional[str] = None  # 匹配的场景配图URL，无匹配时为 null
-    mission: Optional[dict] = None  # 使命进度
+    scene_image: Optional[str] = Field(None, description="匹配到的场景配图 URL，无匹配为 null")
+    mission: Optional[dict] = Field(None, description="使命进度（阶段、剩余回合、本回合判定）")
     mission_achievements: Optional[List[str]] = None  # 本回合解锁的使命成就：{title, goal, stage_index, stages, days_left, status, last_label}
 
 
 class UserAction(BaseModel):
-    """用户行动"""
-    action: str
-    game_session_id: int
+    """一次行动请求。"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"game_session_id": 42, "action": "我蹲下去，先看清地上那串脚印"}
+        }
+    )
+
+    action: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="玩家行动，去除首尾空白后不能为空，最长 200 字",
+    )
+    game_session_id: int = Field(..., description="对局 id（创建对局时返回的 id）")
 
 
 class RewindRequest(BaseModel):
-    """回合回溯：回到第 turn_index 回合（之后的回合会被丢弃）"""
-    turn_index: int
+    """回合回溯：回到第 turn_index 回合（之后的回合会被丢弃）。"""
+
+    turn_index: int = Field(..., description="目标回合序号，0 表示开局；负数由接口返回 400")
 
 
 class GameSessionCreate(BaseModel):
@@ -110,8 +155,8 @@ class GameSessionCreate(BaseModel):
 
 class GameSessionResponse(BaseModel):
     """游戏会话响应"""
-    id: int
-    session_id: Optional[str]
+    id: int = Field(..., description="对局 id，后续行动 / 回溯接口都用它")
+    session_id: Optional[str] = Field(None, description="模型会话标识，首次调用模型后生成")
     character_name: str
     character_gender: str
     character_age: int
@@ -198,9 +243,11 @@ class CharacterInfoResponse(BaseModel):
 
 # ===== 管理后台：小说/历史背景 =====
 class NovelCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    sort_order: int = 0
+    """新建世界（管理后台）。"""
+
+    name: str = Field(..., min_length=1, max_length=100, description="世界名，全局唯一")
+    description: Optional[str] = Field(None, description="一句话简介")
+    sort_order: int = Field(0, description="列表排序，越小越靠前")
 
 
 class NovelUpdate(BaseModel):
@@ -224,10 +271,12 @@ class NovelResponse(BaseModel):
 
 # ===== 管理后台：时间节点 =====
 class TimelineCreate(BaseModel):
-    novel_id: int
-    name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
-    sort_order: int = 0
+    """新建时间节点（管理后台）。"""
+
+    novel_id: int = Field(..., description="所属世界 id")
+    name: str = Field(..., min_length=1, max_length=100, description="节点名，如 赤壁之战")
+    description: Optional[str] = Field(None, description="局势说明")
+    sort_order: int = Field(0, description="节点排序")
 
 
 class TimelineUpdate(BaseModel):
@@ -251,10 +300,11 @@ class TimelineResponse(BaseModel):
 
 # ===== 管理后台：预设角色 =====
 class TimelineEntrySchema(BaseModel):
-    """角色时间节点条目"""
-    timeline: str = Field(..., min_length=1)
-    background: Optional[str] = None
-    initial_scene: str = Field(..., min_length=1)
+    """角色在某个时间节点的设定。"""
+
+    timeline: str = Field(..., min_length=1, description="时间节点名")
+    background: Optional[str] = Field(None, description="该节点下这个角色的处境")
+    initial_scene: str = Field(..., min_length=1, description="开局场景文本")
 
 
 class PresetCharacterAdminCreate(BaseModel):
@@ -264,8 +314,8 @@ class PresetCharacterAdminCreate(BaseModel):
     age: Optional[int] = None
     rank: Optional[str] = None
     background: Optional[str] = None
-    starting_points: int = 0
-    timelines: List[TimelineEntrySchema] = Field(default_factory=list)
+    starting_points: int = Field(0, description="开局积分")
+    timelines: List[TimelineEntrySchema] = Field(default_factory=list, description="该角色可玩的节点，整体替换")
 
 
 class PresetCharacterAdminUpdate(BaseModel):

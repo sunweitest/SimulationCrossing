@@ -117,6 +117,7 @@
           v-model="customAction"
           class="free-action-input"
           placeholder="输入自定义行动..."
+          maxlength="200"
           rows="1"
           @input="autoResize"
           @keyup.enter.exact="performCustomAction"

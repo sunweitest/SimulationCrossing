@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+import logging
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.models.models import User
@@ -12,9 +14,18 @@ from app.core.config import settings
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 
-@router.post("/register", response_model=Token)
+@router.post("/register", response_model=Token, summary="注册账号", responses={400: {"description": "未同意条款 / 缺少邮箱或手机号 / 已被注册"}})
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """用户注册"""
+    """
+    创建一个新账号并直接返回令牌。
+
+    - **权限**：公开
+    - **请求体**：`email` 或 `phone` 至少填一个；`password` 至少 6 位；`agree_terms` 必须为 `true`
+    - **返回**：`access_token` + 用户信息；令牌默认 7 天有效，放在 `Authorization: Bearer <token>`
+    - **错误**
+      - `400` 未勾选条款 / 未提供邮箱或手机号 / 该邮箱或手机号已被注册（并发重复注册也返回 400）
+      - `422` 字段格式不合法（邮箱格式、密码长度等）
+    """
     # 必须先同意条款（前端勾选框 + 后端校验，留痕时间用于合规举证）
     if not user_data.agree_terms:
         raise HTTPException(
@@ -55,7 +66,19 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         terms_accepted_at=now_cn()
     )
     db.add(new_user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 并发下两个请求都通过了上面的 select 判重，后到的撞唯一索引：
+        # 这里必须兜住，否则用户看到 500。
+        await db.rollback()
+        logging.getLogger("auth").warning(
+            "REGISTER_DUPLICATE: email=%s phone=%s", user_data.email, user_data.phone
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该邮箱或手机号已被注册",
+        )
     await db.refresh(new_user)
 
     # 生成令牌
@@ -68,9 +91,16 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     return Token(access_token=access_token, user=user_response)
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, summary="登录", responses={401: {"description": "账号或密码错误"}})
 async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
-    """用户登录"""
+    """
+    用邮箱或手机号 + 密码换取令牌。
+
+    - **权限**：公开
+    - **请求体**：`identifier`（邮箱或手机号）、`password`
+    - **返回**：`access_token` + 用户信息
+    - **错误**：`401` 账号或密码错误；`400` 账号被停用
+    """
     # 查找用户（通过邮箱或手机号）
     result = await db.execute(
         select(User).where(

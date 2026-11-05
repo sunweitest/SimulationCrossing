@@ -5,6 +5,7 @@ import hashlib
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,11 +47,13 @@ def _voter_key(request: Request, user: Optional[object]) -> str:
 
 
 # --------------------------------------------------------------- 世界角色
-@router.get("/world/{novel}/characters")
+@router.get("/world/{novel}/characters", summary="世界的全部角色")
 async def list_world_characters(novel: str, db: AsyncSession = Depends(get_db)):
-    """某个世界的全部预设角色（含小人物、头像、可玩时间节点）。
+    """
+    角色选择页数据：预设角色 + 小人物 + 头像 + 可玩节点。
 
-    角色优先、时间其次：前端先用它渲染角色卡片，选中角色后再展示可用节点。
+    - **权限**：公开
+    - **返回**：`{"novel": ..., "characters": [{name, rank, age, gender, is_minor, image, timelines[]}]}`
     """
     chars = (
         await db.execute(
@@ -104,19 +107,35 @@ async def list_world_characters(novel: str, db: AsyncSession = Depends(get_db)):
 
 
 # --------------------------------------------------------------- 点击埋点
-@router.post("/world-click")
+class WorldClickIn(BaseModel):
+    """世界点击埋点入参。
+
+    novel 允许缺省（保持旧的 400「缺少 novel」语义），但类型必须是字符串、
+    长度 ≤64：对象/布尔/数组一律 422，避免脏值进统计维度。
+    """
+    novel: Optional[str] = Field(default=None, max_length=64)
+
+
+@router.post("/world-click", summary="记录世界点击")
 async def track_world_click(
-    payload: dict,
+    payload: WorldClickIn,
     request: Request,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    novel = (payload or {}).get("novel")
+    """
+    埋点：用户点开某个世界。
+
+    - **权限**：公开（登录则记录 `user_id`，否则记 IP 并标为游客）
+    - **请求体**：`novel`（字符串，≤64 字）；缺字段返回 `400`，类型不对返回 `422`
+    - **说明**：只做统计，不校验世界是否真实存在（历史数据兼容）
+    """
+    novel = (payload.novel or "").strip()
     if not novel:
         raise HTTPException(status_code=400, detail="缺少 novel")
     db.add(
         WorldClickEvent(
-            novel=str(novel)[:64],
+            novel=novel[:64],
             user_id=getattr(user, "id", None),
             is_guest=user is None,
             client_ip=client_ip(request),
@@ -126,9 +145,14 @@ async def track_world_click(
     return {"ok": True}
 
 
-@router.get("/world-clicks")
+@router.get("/world-clicks", summary="世界点击排行")
 async def world_clicks(db: AsyncSession = Depends(get_db)):
-    """各世界被点开的次数（近 30 天 + 累计）"""
+    """
+    各世界被点开的次数。
+
+    - **权限**：公开
+    - **返回**：近 30 天与累计计数，按累计倒序
+    """
     total = dict(
         (await db.execute(
             select(WorldClickEvent.novel, func.count()).group_by(WorldClickEvent.novel)
@@ -156,12 +180,18 @@ async def world_clicks(db: AsyncSession = Depends(get_db)):
 
 
 # --------------------------------------------------------------- 投票
-@router.get("/world-votes")
+@router.get("/world-votes", summary="世界投票结果")
 async def list_world_votes(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    """
+    角色/世界投票的当前得票与候选。
+
+    - **权限**：公开
+    - **返回**：`candidates[]` 与 `total_votes`
+    """
     rows = (
         await db.execute(select(WorldVote.world_name, func.count()).group_by(WorldVote.world_name))
     ).all()
@@ -181,13 +211,20 @@ async def list_world_votes(
     return {"candidates": items, "my_votes": sorted(mine), "total_votes": sum(counts.values())}
 
 
-@router.post("/world-vote")
+@router.post("/world-vote", summary="给世界投票")
 async def vote_world(
     payload: dict,
     request: Request,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    """
+    投票（同一身份重复投同一项只记一次）。
+
+    - **权限**：公开
+    - **请求体**：`novel`
+    - **错误**：`400` 参数缺失；`429` 投票过于频繁
+    """
     name = (payload or {}).get("world_name")
     if not name or name not in {c["name"] for c in VOTE_CANDIDATES}:
         raise HTTPException(status_code=400, detail="不在候选列表里")
@@ -207,9 +244,14 @@ async def vote_world(
 
 
 # --------------------------------------------------------------- 天梯
-@router.get("/ladder")
+@router.get("/ladder", summary="天梯榜")
 async def ladder(world: Optional[str] = None, limit: int = 20, db: AsyncSession = Depends(get_db)):
-    """天梯榜：按世界统计最高分/平均分/参与人数，并给出各世界的高分存档"""
+    """
+    按世界统计最高分 / 平均分 / 参与人数，并给出各世界的高分存档。
+
+    - **权限**：公开
+    - **注意**：返回的高分存档 id 只能看到「积分/成就」摘要；直接读存档详情仍受归属校验（`403`）
+    """
     limit = max(1, min(limit, 100))
     q = select(
         GameSession.novel,
