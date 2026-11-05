@@ -2,17 +2,50 @@
 
 ## 项目概述
 
-这是一个基于FastAPI + Vue.js开发的AI互动小说游戏,玩家可以穿越到中国古典小说(三国演义、水浒传)或历史时期(明代、清代),扮演经典角色或自定义角色,通过AI生成剧情进行互动冒险。
+一个基于 FastAPI + Vue 3 的 AI 互动小说游戏。玩家选一个世界（三国、水浒、西游、红楼、封神、金瓶梅、废土末世、武侠、仙侠、明/清、大唐长安、北宋汴京，共 13 个）和一个时间节点，以预设角色或自定义角色穿越进去；每一回合提交一个行动，模型续写剧情、给出三个选项并推进「使命」。
+
+## 在线体验
+
+官方实例：**https://wanchuanyue.com**（无需安装，注册即玩）
+
+> 每日免费次数有限（未登录 5 次 / 登录 8 次），AI 生成有成本，请勿压测。
+> 想自己部署？见 [部署](#部署)。
+
+本项目以 AGPL-3.0 开源，你也可以完全自托管，官方实例不参与你的数据。
+
+## 截图
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/worlds.webp" alt="选择穿越世界：13 个世界，各有不同的时代与开场"><br>
+<b>选世界 · 选时刻</b><br>13 个世界，从三国赤壁到废土末世，每个世界自带若干时间节点</td>
+<td width="50%"><img src="docs/images/gameplay.webp" alt="剧情主界面：顶部使命条、正文、三个行动选项与自定义输入"><br>
+<b>一回合一次抉择</b><br>顶部是使命与倒计时，正文由模型续写，底部三个行动选项 + 自由输入</td>
+</tr>
+<tr>
+<td><img src="docs/images/rewind.webp" width="360" alt="回溯面板：列出每一回合的摘要与当时的选择"><br>
+<b>回溯 · 每一步都留档</b><br>每回合的剧情与选择都落库，可回到任意一回合重来，积分与成就一起回退</td>
+<td valign="top">
+
+**为什么能回溯**：每回合的剧情、选项、积分与使命状态都写进 PostgreSQL，
+回溯只删掉目标回合之后的记录并还原当时场景，不重新生成历史。
+
+**为什么不会跑偏**：每个角色在每条时间线上都有一条「使命」，
+分三个阶段、带回合期限；失败会进入下一幕，而不是从头再来。
+
+</td>
+</tr>
+</table>
 
 ## 技术栈
 
 ### 后端
 - **FastAPI** - 现代化的Python Web框架
 - **SQLAlchemy** - 异步ORM
-- **SQLite** - 轻量级数据库
+- **PostgreSQL** - 主数据库（异步驱动 asyncpg）
 - **Redis** - 次数限制缓存
 - **JWT** - 用户认证
-- **DashScope** - 阿里云AI大模型API
+- **DeepSeek** - 主模型服务；异常时自动切换阿里云百炼（同模型，选项用 qwen-plus）
 
 ### 前端
 - **Vue 3** - 渐进式JavaScript框架
@@ -31,12 +64,12 @@
    - 未登录用户也可体验
 
 2. **次数限制**
-   - 未登录用户: 每日6次消息(基于IP+User-Agent指纹)
-   - 已登录用户: 每日8次消息(6+2)
+   - 未登录用户: 每日 5 次（按 IP）
+   - 已登录用户: 每日 8 次（按账号）
    - Redis缓存实现,自动过期
 
 3. **角色创建**
-   - 5个世界背景: 三国演义、西游记、水浒传、明代、清代
+   - 13 个世界: 三国演义、水浒传、明代、清代、西游记、金瓶梅、废土末世、红楼梦、封神演义、武侠江湖、仙侠修真、大唐长安、北宋汴京
    - 多个时间节点选择
    - 预设经典角色(诸葛亮、赵云、曹操等)
    - 自定义角色创建
@@ -49,7 +82,12 @@
    - 自由输入行动
    - 积分和成就系统
 
-5. **UI设计**
+5. **使命与回溯**
+   - 每个角色在每条时间线上有专属「使命」：3 个阶段 + 回合期限
+   - 使命失败会进入下一幕（由模型结合失败原因生成新目标），主角死亡则本局结束
+   - 任意回合可回溯，积分与成就一起回退
+
+6. **UI设计**
    - 简约风格
    - 响应式布局
    - 流畅动画效果
@@ -138,7 +176,7 @@ npm run dev
 
 ```env
 # 数据库
-DATABASE_URL=sqlite+aiosqlite:///./game.db
+DATABASE_URL=postgresql+asyncpg://novel_user:your-password@localhost:5432/simulation_crossing
 
 # JWT密钥(生产环境必须修改!)
 SECRET_KEY=your-secret-key-here
@@ -150,12 +188,16 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
-# DashScope API (必填!)
-DASHSCOPE_API_KEY=your-api-key
-SHUIHU_APP_ID=your-app-id
-SANGUO_APP_ID=your-app-id
-MINGDAI_APP_ID=your-app-id
-QINGDAI_APP_ID=your-app-id
+# 模型服务（必填）
+DEEPSEEK_API_KEY=your-deepseek-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+
+# 备用模型（可选）：主链路超时/5xx 时自动切换，指向阿里云百炼兼容端点
+LLM_FAILOVER_ENABLED=true
+LLM_FAILOVER_API_KEY=your-dashscope-key
+LLM_FAILOVER_BASE_URL=https://llm-t2prhzae03osgg8c.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+LLM_FAILOVER_MODEL=deepseek-v4.1-flash
 
 # CORS
 CORS_ORIGINS=http://localhost:5173,http://localhost:8080
@@ -211,7 +253,7 @@ DAILY_LOGGED_IN_EXTRA=10
 
 3. **执行游戏行动**
    - 前端发送用户行动
-   - 后端调用DashScope API生成剧情
+   - 后端调用主模型（DeepSeek，异常时切阿里云百炼）生成剧情
    - 解析JSON响应
    - 更新游戏状态
    - 保存历史记录
@@ -223,7 +265,7 @@ DAILY_LOGGED_IN_EXTRA=10
    - 超限返回429错误
    - 前端提示用户登录
 
-## 部署建议
+## 部署
 
 ### 后端部署
 
@@ -279,14 +321,19 @@ npm run build
 ### 1. Redis连接失败
 确保Redis服务已启动,检查端口是否正确
 
-### 2. DashScope API调用失败
-检查.env中的API密钥是否正确,账户余额是否充足
+### 2. 模型调用失败 / 剧情一直转圈
+先看 `journalctl -u novel-backend` 里有没有 `LLM_FAILOVER`、`NEXT_ACT_FALLBACK`；
+检查 `.env` 的 `DEEPSEEK_API_KEY` 与备用 `LLM_FAILOVER_*` 是否配置、余额是否充足。
 
 ### 3. 前端无法访问后端
 检查CORS配置,确认前端URL在CORS_ORIGINS中
 
 ### 4. 数据库初始化失败
-删除game.db文件,重新启动后端自动创建
+确认 PostgreSQL 已启动、`DATABASE_URL` 指向正确库；表结构由 Alembic 管理：
+
+```bash
+cd backend && alembic upgrade head
+```
 
 ## 相关链接
 
@@ -317,5 +364,5 @@ python scripts/import_content.py check
 
 ## 许可证
 
-MIT License
+GNU AGPL-3.0（见 [LICENSE](LICENSE)）
 
