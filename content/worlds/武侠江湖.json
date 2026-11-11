@@ -802,7 +802,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/武侠江湖/卫无咎.webp"
     },
     {
       "name": "柳三更",
@@ -862,7 +862,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/武侠江湖/柳三更.webp"
     },
     {
       "name": "沈砚",
@@ -898,7 +898,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/武侠江湖/沈砚.webp"
     }
   ]
 }

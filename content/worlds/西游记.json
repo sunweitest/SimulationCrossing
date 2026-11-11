@@ -54,7 +54,7 @@
       "starting_points": 80,
       "role": "main",
       "background": "东胜神洲花果山仙石所出，得菩提祖师传授七十二般变化与筋斗云。大闹天宫后被压五行山下五百年，后随唐僧西天取经，被封斗战胜佛。",
-      "image": "",
+      "image": "/images/characters/西游记/孙悟空.webp",
       "timelines": {
         "大闹天宫": {
           "background": "你偷蟠桃、盗仙丹、闯凌霄殿，天兵天将无人能敌。但如来佛的五指山，正等着你。",
@@ -234,7 +234,7 @@
       "starting_points": 70,
       "role": "main",
       "background": "法号玄奘，俗名陈祎，大唐皇帝御弟。前世为金蝉子，因轻慢佛法遭贬下凡，十世修行。虽手无缚鸡之力，但心怀普度众生之志。",
-      "image": "",
+      "image": "/images/characters/西游记/唐僧.webp",
       "timelines": {
         "西天取经": {
           "background": "唐王赐你紫金钵盂与通关文牒。你辞别长安，踏上了一去十万八千里的西行之路。",
@@ -342,7 +342,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "前世为天蓬元帅，因醉酒调戏嫦娥被贬下凡，误投猪胎。性格贪吃好色，但手上九齿钉耙也是真本领。",
-      "image": "",
+      "image": "/images/characters/西游记/猪八戒.webp",
       "timelines": {
         "西天取经": {
           "background": "你在高老庄为妖，被悟空收服，做了唐僧二徒弟。虽然嘴上总说不愿走路，但钉耙也打了不少妖精。",
@@ -426,7 +426,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "前世为天庭卷帘大将，因失手打碎琉璃盏被贬下流沙河。性格沉默寡言，忠厚老实。颈上挂着九个骷髅头，是前九世来取经的和尚。",
-      "image": "",
+      "image": "/images/characters/西游记/沙僧.webp",
       "timelines": {
         "西天取经": {
           "background": "你在流沙河中为妖，颈上挂着九个骷髅。那是你吃掉的前九个取经人的头骨。这一次，你不再吃人了——你成了取经人的三徒弟。",
@@ -486,7 +486,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "西海龙王敖闰之子，因焚毁殿上明珠被贬。化身为白马驮唐僧西行，默默承受所有重量。",
-      "image": "",
+      "image": "/images/characters/西游记/白龙马.webp",
       "timelines": {
         "西天取经": {
           "background": "你因纵火烧了龙宫明珠，被父王告上天庭。本该处斩，观音菩萨保你一命，让你化作白马，驮取经人一路向西。",
@@ -546,7 +546,7 @@
       "starting_points": 75,
       "role": "main",
       "background": "大慈大悲，救苦救难。坐莲花台，持净瓶杨柳，普度众生。西行之旅的幕后推动者与指引者。",
-      "image": "",
+      "image": "/images/characters/西游记/观音菩萨.webp",
       "timelines": {
         "大闹天宫": {
           "background": "你奉如来法旨，前往天宫。在凌霄殿外，你静静旁观这场闹剧——那只猴子，将来是取经人的关键。",
@@ -606,7 +606,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "七大圣之首，号平天大圣。力大无穷，威震妖界。与孙悟空是结义兄弟，后因火焰山之事反目。",
-      "image": "",
+      "image": "/images/characters/西游记/牛魔王.webp",
       "timelines": {
         "火焰山": {
           "background": "你占据翠云山芭蕉洞，铁扇公主是你妻。孙悟空来借芭蕉扇，哼——当年七兄弟结义不算，他如今跟了佛门，你依旧是妖王。",
@@ -666,7 +666,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "又名罗刹女，牛魔王之妻，红孩儿之母。手持芭蕉扇，能扇灭火焰山八百里烈火。性格刚烈。",
-      "image": "",
+      "image": "/images/characters/西游记/铁扇公主.webp",
       "timelines": {
         "火焰山": {
           "background": "你的红孩儿被观音收去做了善财童子，你恨猴入骨。如今孙悟空来借芭蕉扇？痴心妄想。",
@@ -726,7 +726,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "又名白骨夫人，白虎岭妖王。虽为妖魔，却是一缕不甘的执念所化——生前是一枉死的女子，死后化为白骨精，以变化之术惑人。",
-      "image": "",
+      "image": "/images/characters/西游记/白骨精.webp",
       "timelines": {
         "三打白骨精": {
           "background": "你三次变化——少女、老妇、老翁——只为吃一口唐僧肉。孙悟空每次都看穿了你，但唐僧肉眼凡胎，他信你，不信他的徒弟。",
@@ -762,7 +762,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "西凉女国之主，貌美如仙。国中无男子，遇唐僧后一见倾心，欲以江山为聘。这一关，不是妖，却比任何妖魔都难渡。",
-      "image": "",
+      "image": "/images/characters/西游记/女儿国国王.webp",
       "timelines": {
         "女儿国": {
           "background": "你是西凉女国的一国之主，从未见过男子。直到那天——一位从东土大唐来的和尚，走进你的王宫。他的眉目，他的一举一动，让你第一次明白了什么叫心动。",
@@ -798,7 +798,7 @@
       "starting_points": 70,
       "role": "main",
       "background": "即释迦牟尼佛，西方极乐世界之主。法力无边，佛法如海。五百年前一掌将孙悟空压在五行山下。",
-      "image": "",
+      "image": "/images/characters/西游记/如来佛祖.webp",
       "timelines": {
         "五行山下": {
           "background": "你将那猴子压在五行山下，已经五百年了。观音菩萨来说，取经人要来了——这猴子就是他最大的护法。",
@@ -859,7 +859,8 @@
             "stakes": "话没带到，大王先拿你下酒；锣和旗丢了，连尸首都没人收。"
           }
         }
-      }
+      },
+      "image": "/images/characters/西游记/小钻风.webp"
     },
     {
       "name": "奔波儿灞",
@@ -894,7 +895,8 @@
             "stakes": "被那猴子发现一棒打死，空手回去也要被驸马撵出碧波潭。"
           }
         }
-      }
+      },
+      "image": "/images/characters/西游记/奔波儿灞.webp"
     },
     {
       "name": "高太公",
@@ -929,7 +931,8 @@
             "stakes": "猪妖破门抢走女儿，高家粮仓被吃空，再无钱请人。"
           }
         }
-      }
+      },
+      "image": "/images/characters/西游记/高太公.webp"
     },
     {
       "name": "老鼋",
@@ -964,7 +967,8 @@
             "stakes": "错过这趟回程，脱壳再等千年；经书若落水，连问话的人也没了。"
           }
         }
-      }
+      },
+      "image": "/images/characters/西游记/老鼋.webp"
     }
   ]
 }

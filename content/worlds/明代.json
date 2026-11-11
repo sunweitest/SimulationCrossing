@@ -49,7 +49,7 @@
       "starting_points": 70,
       "role": "main",
       "background": "明朝开国皇帝，年号洪武，布衣出身，建立大明王朝。",
-      "image": "",
+      "image": "/images/characters/明代/朱元璋.webp",
       "timelines": {
         "洪武之治": {
           "background": "你已登基为帝，大力反腐，整顿吏治，但诛杀功臣，朝中人心惶惶。",
@@ -85,7 +85,7 @@
       "starting_points": 65,
       "role": "main",
       "background": "明成祖，朱元璋第四子，原为燕王，通过靖难之役夺取皇位，年号永乐。",
-      "image": "",
+      "image": "/images/characters/明代/朱棣.webp",
       "timelines": {
         "靖难之役": {
           "background": "你以清君侧为名，起兵反抗建文帝，战事胶着。",
@@ -145,7 +145,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "字叔大，明代杰出政治家，推行万历新政，改革赋税。",
-      "image": "",
+      "image": "/images/characters/明代/张居正.webp",
       "timelines": {
         "万历乱局": {
           "background": "你作为首辅，大力改革，但权倾朝野，引来朝中非议。",
@@ -181,7 +181,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "朱元璋原配，淮西人。贤德开明，多次劝谏朱元璋少行杀戮，深受朝野敬重，谥号孝慈高皇后。",
-      "image": "",
+      "image": "/images/characters/明代/马皇后.webp",
       "timelines": {
         "洪武之治": {
           "background": "你贵为皇后，见皇上大肆诛杀功臣，心如刀绞。你在后宫用膳时，总留一份给那些被下狱的臣子。",
@@ -217,7 +217,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "回族，本姓马，明成祖赐名郑和。率当时世界上最庞大的舰队七下西洋，中国最伟大的航海家。",
-      "image": "",
+      "image": "/images/characters/明代/郑和.webp",
       "timelines": {
         "永乐盛世": {
           "background": "你受命下西洋，率宝船舰队远航。西洋诸国或臣服或惊叹，但朝中有人质疑这'虚耗国力'。",
@@ -253,7 +253,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "字汝贤，号刚峰，海南琼山人。明代第一清官，备棺上疏骂嘉靖，刚正不阿。",
-      "image": "",
+      "image": "/images/characters/明代/海瑞.webp",
       "timelines": {
         "万历乱局": {
           "background": "你在南京任上都御史，弹劾贪官，整顿吏治。百姓称颂，但得罪了无数权贵。",
@@ -289,7 +289,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "名基，字伯温，青田人。精通天文、兵法、数术，辅佐朱元璋平定天下，以神机妙算著称，与诸葛亮齐名。",
-      "image": "",
+      "image": "/images/characters/明代/刘伯温.webp",
       "timelines": {
         "洪武之治": {
           "background": "天下已定，你功成身退。但在这位布衣天子身边，你知道——飞鸟尽，良弓藏。",
@@ -325,7 +325,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "中山王徐达之女。自幼聪慧过人，嫁与燕王朱棣，是靖难之役中朱棣最坚定的后盾。后成永乐皇后，辅佐丈夫开创盛世。",
-      "image": "",
+      "image": "/images/characters/明代/徐皇后.webp",
       "timelines": {
         "靖难之役": {
           "background": "丈夫朱棣起兵靖难，你在北平城中坐镇调度。敌军围城，你披甲上城，鼓舞军心。你是燕王妃——而你守的，是燕王的根基。",
@@ -385,7 +385,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "明太祖朱元璋之孙，继位后推行削藩。被叔父朱棣以靖难之名推翻，从此下落不明，成为明朝最大的谜案。",
-      "image": "",
+      "image": "/images/characters/明代/朱允炆.webp",
       "timelines": {
         "靖难之役": {
           "background": "你继位不久，锐意削藩。但四叔朱棣岂是甘于就范之人？靖难之役，皇位之争——你面对的是大明最能打的将军。",
@@ -421,7 +421,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "字廷益，号节庵。土木堡之变后，力主抗敌，保卫北京。挽狂澜于既倒，救大明于存亡。'粉身碎骨浑不怕，要留清白在人间。'",
-      "image": "",
+      "image": "/images/characters/明代/于谦.webp",
       "timelines": {
         "土木堡之变": {
           "background": "皇帝被俘，京师震动。大臣们主张南迁——你却站出来，一条条驳回了逃跑的提议。北京，必须守。",
@@ -457,7 +457,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字元敬，号南塘。组建'戚家军'，发明鸳鸯阵，在东南沿海大破倭寇。文武双全，著有《纪效新书》。",
-      "image": "",
+      "image": "/images/characters/明代/戚继光.webp",
       "timelines": {
         "万历乱局": {
           "background": "倭寇猖獗，朝廷却忙于党争。你只身赴东南，招募新兵，锻造军阵。你不问朝堂上谁说了算——你只管战场上谁活下来。",
@@ -493,7 +493,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "姓爱新觉罗。以十三副遗甲起兵，统一女真各部，创立八旗制度。萨尔浒一战，大破明军，奠定后金基业。",
-      "image": "",
+      "image": "/images/characters/明代/努尔哈赤.webp",
       "timelines": {
         "女真崛起": {
           "background": "你统一了建州女真，如今兵强马壮。大明的边关在你眼中不再坚不可摧——你为大明守了一辈子边，现在该为女真人打天下了。",
@@ -529,7 +529,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字元素，号自如。宁远大捷中炮伤努尔哈赤，宁锦大捷再败皇太极。以一己之力撑起辽东防线，最终却死于崇祯的猜忌。",
-      "image": "",
+      "image": "/images/characters/明代/袁崇焕.webp",
       "timelines": {
         "女真崛起": {
           "background": "你单骑出关，视察辽东防务。努尔哈赤称汗，八旗铁骑虎视眈眈。你知道大明的边疆已危如累卵——而你，必须成为那座最硬的城。",
@@ -565,7 +565,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "陕西米脂人，原为驿卒。明末农民军领袖，提出'均田免赋'，率军攻入北京，推翻了明朝统治。",
-      "image": "",
+      "image": "/images/characters/明代/李自成.webp",
       "timelines": {
         "闯王进京": {
           "background": "你率领农民军，一路势如破竹。北京城的九门紧闭，但城墙再高，也挡不住一个王朝的腐朽。",
@@ -601,7 +601,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "明朝末代皇帝。勤政节俭，力图中兴，但积重难返。李自成破城之日，你斩杀了妻女，独登煤山。",
-      "image": "",
+      "image": "/images/characters/明代/朱由检.webp",
       "timelines": {
         "闯王进京": {
           "background": "十七年了，你每天只睡两个时辰，衣服打满补丁。你杀了魏忠贤，平了阉党——但大明的气数，似乎走到了尽头。",
@@ -637,7 +637,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "明朝第六位皇帝，年号正统。宠信太监王振，御驾亲征瓦剌，却在土木堡兵败被俘。被囚一年后归国，又被弟弟景泰帝软禁七年。",
-      "image": "",
+      "image": "/images/characters/明代/朱祁镇.webp",
       "timelines": {
         "土木堡之变": {
           "background": "你听信太监王振之言，率二十万大军亲征瓦剌。你从未打过仗——但你是天子，你觉得天命在你。",
