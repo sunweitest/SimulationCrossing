@@ -81,14 +81,34 @@ def _favorability_label(score: int) -> str:
         return "深仇大恨"
 
 
+def _recent_scene_text(history: Optional[List[Dict]], turns: int = 2) -> str:
+    """取最近几段模型写过的剧情文本，用来判断谁刚刚出场过。"""
+    if not history:
+        return ""
+    picked: List[str] = []
+    for msg in reversed(history):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content") or ""
+        if not content:
+            continue
+        picked.append(str(content)[-1200:])
+        if len(picked) >= turns:
+            break
+    return "\n".join(picked)
+
+
 def _inject_character_context(
     user_input: str,
     characters_state: Optional[Dict],
+    history: Optional[List[Dict]] = None,
+    limit: int = 5,
 ) -> str:
-    """扫描用户输入中出现的角色名，从 characters_state 提取信息注入 prompt。
+    """预取本回合最可能出场的 3-5 个角色，直接拼进 prompt。
 
-    只在用户输入中匹配已有角色名，不注入全量角色列表。
-    这样 LLM 能获得角色信息而不需要 tool calling，保证流式输出不被阻塞。
+    排序依据：玩家这句话点名（权重最高）→ 最近两段剧情里出现过 → 好感度绝对值
+    （关系变化越大越值得交代）→ 有最近互动记录 / 状态异常。
+    预取替代的是「模型自己想起来调 query_character」，工具仍留着兜底。
     """
     if not characters_state:
         return user_input
@@ -97,32 +117,60 @@ def _inject_character_context(
     if not chars:
         return user_input
 
-    # 找出用户输入中提到的角色
-    mentioned = []
-    for c in chars:
-        name = c.get("name", "")
-        if name and name in user_input:
-            mentioned.append(c)
+    recent = _recent_scene_text(history)
 
-    if not mentioned:
+    scored = []
+    for c in chars:
+        name = (c.get("name") or "").strip()
+        if not name:
+            continue
+        # 玩家自己不进关系块（模型会把自己写成 NPC）
+        if c.get("relationship_to_player") in ("本人", "自己"):
+            continue
+        score = 0.0
+        if name in user_input:
+            score += 100
+        if recent and name in recent:
+            score += 50
+        try:
+            score += min(abs(int(c.get("favorability") or 0)), 60) / 10.0
+        except (TypeError, ValueError):
+            pass
+        if c.get("last_interaction"):
+            score += 5
+        if c.get("status") and c.get("status") != "存活":
+            score += 3
+        if score < 3:
+            continue
+        scored.append((score, c))
+
+    if not scored:
         return user_input
 
-    # 构建注入文本
-    lines = ["\n【当前人物关系】（基于玩家输入中提到的角色）"]
-    for c in mentioned:
-        fav = c.get("favorability", 0)
-        label = _favorability_label(fav)
+    scored.sort(key=lambda item: item[0], reverse=True)
+    picked = [c for _, c in scored[:limit]]
+
+    lines = ["\n【本回合相关人物】（系统预取，可直接引用；未列出的角色仍可调用 query_character 查询）"]
+    for c in picked:
+        try:
+            fav = int(c.get("favorability") or 0)
+        except (TypeError, ValueError):
+            fav = 0
         lines.append(
             f"- {c['name']}：{c.get('identity', '未知身份')}，"
             f"与你的关系：{c.get('relationship_to_player', '未知')}，"
-            f"好感度：{fav}（{label}），"
+            f"好感度：{fav}（{_favorability_label(fav)}），"
             f"状态：{c.get('status', '存活')}"
         )
         if c.get("last_interaction"):
-            lines.append(f"  最近互动：{c['last_interaction']}")
+            lines.append(f"  最近互动：{str(c['last_interaction'])[:80]}")
 
-    context = "\n".join(lines)
-    return f"{context}\n\n{user_input}"
+    logger.info(
+        "CHAR_PREFETCH: picked=%s%s",
+        [c.get("name") for c in picked],
+        "" if len(scored) <= limit else f" (候选 {len(scored)})",
+    )
+    return "\n".join(lines) + "\n\n" + user_input
 
 
 async def _character_tool_handler(
@@ -715,9 +763,13 @@ class GameService:
             from app.services.llm.deepseek_provider import CHARACTER_TOOLS
             tools = CHARACTER_TOOLS
 
+        prefetched_input = _inject_character_context(
+            user_input, characters_state, history=history
+        )
+
         result = await provider.generate(
             character_info,
-            user_input,
+            prefetched_input,
             session_id,
             history=history,
             tools=tools,
@@ -748,7 +800,9 @@ class GameService:
         provider = get_provider()
 
         # 预注入角色上下文到 user_input，避免 tool calling 阻塞流式输出
-        augmented_input = _inject_character_context(user_input, characters_state)
+        augmented_input = _inject_character_context(
+            user_input, characters_state, history=history
+        )
 
         if hasattr(provider, "stream_story"):
             return await provider.stream_story(
