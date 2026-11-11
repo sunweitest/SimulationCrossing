@@ -1,0 +1,19 @@
+{
+  "size": "1664*928",
+  "style": "电影感当代都市概念设定图，写实质感，低饱和，克制的光。35mm 镜头，浅景深，轻微胶片颗粒。构图 16:9，主体位于画面中下部，上方留出建筑/夜色层次，左侧或右侧留出安静区域可放标题。整体偏暗，不要大面积过曝高光。不要出现任何文字、水印、logo、界面 UI。不要二次元、不要卡通。",
+  "negative": "text, letters, watermark, logo, signature, UI, border, frame, cartoon, anime, cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed hands, extra limbs, duplicate subject, plastic look, ancient chinese clothing, palace, hanfu, swordsman, fantasy castle",
+  "items": [
+    {
+      "name": "都市修真封面-深夜写字楼",
+      "kind": "cover",
+      "cover_target": "urban",
+      "prompt": "深夜的现代写字楼群，玻璃幕墙里零星亮着几格办公室的灯，楼下的街道被夜色压得很暗，只有便利店和路灯是暖的。高处的空气里有一层极淡的青色雾气，像灵气在城市上空缓慢流动，雾中隐约有极细的光丝从楼顶垂向地面。一个穿深色衬衫的年轻男人背影站在天台边缘，手里拿着手机，屏幕的微光映亮他半边脸。远处城市天际线延伸到雾里。"
+    },
+    {
+      "name": "日常生活封面-清晨街口",
+      "kind": "cover",
+      "cover_target": "daily",
+      "prompt": "清晨六点半的中国城市街口，天刚亮，空气里有薄雾。街边一排卷帘门小饭馆还没有开门，一家早餐铺的蒸笼冒着白气，塑料凳歪在门口。远处是刚亮灯的老式居民楼和几栋写字楼，一个穿外卖骑手服的人骑车经过，车灯在湿路面上拉出一道光。构图安静，没有主角的脸，只有普通的一天刚开始的样子。"
+    }
+  ]
+}

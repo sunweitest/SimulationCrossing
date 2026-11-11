@@ -328,6 +328,8 @@ import wuxiaImage from '../../../images/wuxia.png'
 import xianxiaImage from '../../../images/xianxia.png'
 import datangImage from '../../../images/datang.png'
 import bianjingImage from '../../../images/bianjing.png'
+import urbanImage from '../../../images/urban.png'
+import dailyImage from '../../../images/daily.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -378,10 +380,12 @@ const FALLBACK_NOVELS = {
   '废土末世': ['灾变降临', '秩序崩坏', '废土求生', '势力割据', '文明余烬'],
   '红楼梦': ['元妃省亲', '大观园结社', '抄检大观园', '荣府抄家', '白茫茫大地'],
   '封神演义': ['女娲宫题诗', '妲己入宫', '黄飞虎反五关', '闻仲伐西岐', '牧野之战'],
-  '武侠江湖': ['初入江湖', '武林大会', '魔教东来', '名剑之争', '江湖落幕'],
+  '武侠江湖': ['初入江湖', '武林大会', '魔教东来', '名剑之争', '江湖落幕', '青龙夜宴'],
   '仙侠修真': ['拜入山门', '筑基试炼', '宗门大比', '正魔之争', '飞升雷劫'],
   '大唐长安·天宝末年': ['天宝盛世', '谪仙入宫', '渔阳鼙鼓', '马嵬之变', '长安收复'],
-  '北宋汴京之变': ['宣和盛世', '花石纲', '金兵南下', '靖康之变', '南渡']
+  '北宋汴京之变': ['宣和盛世', '花石纲', '金兵南下', '靖康之变', '南渡'],
+  '都市修真': ['灵气初醒', '写字楼修行', '城隍庙拆迁', '地脉之争', '天劫将至'],
+  '日常生活': ['周一早高峰', '项目上线前夜', '开店第一年', '年底考核', '春节回家']
 }
 
 // 从API加载的角色详情缓存
@@ -452,6 +456,16 @@ const worldImageMap = {
     src: bianjingImage,
     thumb: '/images/covers/bianjing.webp',
     caption: '汴河千帆，终成旧梦'
+  },
+  '都市修真': {
+    src: urbanImage,
+    thumb: '/images/covers/urban.webp',
+    caption: '写字楼里，灵气初醒'
+  },
+  '日常生活': {
+    src: dailyImage,
+    thumb: '/images/covers/daily.webp',
+    caption: '周一早高峰，日子照旧'
   }
 }
 
