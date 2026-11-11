@@ -1,0 +1,13 @@
+{
+  "size": "1664*928",
+  "style": "明代市井题材概念设定图，写实电影感。明亮的暖色调：晨光斜射、金色阳光、通透空气感。色彩饱和但不刺眼，主打暖金、朱红、月白、藕荷。35mm 镜头，浅景深，轻微胶片颗粒。构图 16:9，主体位于画面中下部，上方留出屋檐与天空层次，左右留出可放标题的安静区域。这一张要求整体明亮（不同于暗调历史图），不要大面积阴影。不要出现任何文字、水印、logo、界面元素，不要卡通或二次元风格。",
+  "negative": "text, letters, watermark, logo, signature, UI, border, frame, cartoon, anime, cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed hands, extra limbs, duplicate subject, plastic look, dark, underexposed, night scene, heavy vignette, modern clothing, modern vehicle",
+  "items": [
+    {
+      "name": "金瓶梅封面-清河县绸缎铺晨光",
+      "kind": "cover",
+      "cover_target": "jinpingmei",
+      "prompt": "明代清河县的临街绸缎铺，清晨的阳光斜斜照进铺面，木架上晾着一匹匹色彩鲜明的丝绸（石榴红、月白、藕荷、鹅黄），布匹边缘在光里透亮。一位穿鹅黄与月白相间衫裙的年轻女子站在柜台前，手指捻着一匹红缎，侧脸带笑；身旁的伙计正把布卷抱上木架，柜台上有算盘、茶盏和一本翻开的账簿。门外是青石板街道，挑着担子的小贩走过，檐下挂着红灯笼与写着幌子的木牌。空气里有细小的浮尘被阳光照亮。"
+    }
+  ]
+}

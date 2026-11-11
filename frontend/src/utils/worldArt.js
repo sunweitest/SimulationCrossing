@@ -8,7 +8,7 @@ export const WORLD_ART = {
   '明代': { slug: 'mingdai', caption: '宫阙深处，风云暗涌' },
   '清代': { slug: 'qingdai', caption: '盛世帘影，旧梦将醒' },
   '西游记': { slug: 'xiyou', caption: '西行路上，妖雾重重' },
-  '金瓶梅': { slug: 'jinpingmei', caption: '清河县里，浮世众生' },
+  '金瓶梅': { slug: 'jinpingmei', caption: '绸缎铺里，人人算账' },
   '废土末世': { slug: 'wasteland', caption: '废土荒原，文明余烬' },
   '红楼梦': { slug: 'hongloumeng', caption: '大观园里，一梦浮生' },
   '封神演义': { slug: 'fengshen', caption: '三界押注，商亡周兴' },
