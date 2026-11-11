@@ -22,7 +22,8 @@
 
         <footer class="legal-foot">
           <p>运营者：{{ LEGAL_META.operator }}</p>
-          <p>联系邮箱：<a :href="`mailto:${LEGAL_META.email}`">{{ LEGAL_META.email }}</a></p>
+          <p>联系方式：QQ {{ LEGAL_META.qq }}</p>
+          <p>邮箱：<a :href="`mailto:${LEGAL_META.email}`">{{ LEGAL_META.email }}</a></p>
         </footer>
       </article>
 

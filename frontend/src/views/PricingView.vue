@@ -37,19 +37,6 @@
         </article>
       </section>
 
-      <section class="cost">
-        <h2>为什么是这个价</h2>
-        <p>
-          一回合剧情，模型要读约 7.9K tokens（世界设定、最近剧情、人物关系、你的行动），写回约 0.8K tokens。
-          用 DeepSeek-V4.1-Flash 算下来，<strong>一次行动大约 {{ PRICING_META.costPerTurn }}</strong>
-          （命中缓存时更便宜，高峰期贵一倍）。
-        </p>
-        <p>
-          月卡按每天玩 10 回合算，一个月模型成本约 2–4 元；其余是服务器、域名、场景图与头像生成。
-          我们没做自动续费，也没有「先免费后扣款」的套路。
-        </p>
-      </section>
-
       <section class="faq">
         <h2>常见问题</h2>
         <details v-for="(item, i) in PRICING_FAQ" :key="i" class="faq-item">
@@ -82,7 +69,7 @@
 
 <script setup>
 import { ref } from 'vue'
-import { PLANS, PRICING_FAQ, PRICING_META } from '@/content/pricing'
+import { PLANS, PRICING_FAQ } from '@/content/pricing'
 import { AUTHOR_QQ, CONTACT_TIP } from '@/content/contact'
 
 const copied = ref(false)
@@ -269,13 +256,11 @@ function openContact() {
   color: #8a6d2f;
 }
 
-.cost,
 .faq,
 .contact {
   margin-top: 34px;
 }
 
-.cost h2,
 .faq h2,
 .contact h2 {
   margin: 0 0 12px;
@@ -283,16 +268,11 @@ function openContact() {
   letter-spacing: 0.04em;
 }
 
-.cost p,
 .contact p {
   margin: 0 0 10px;
   font-size: 0.9rem;
   line-height: 1.8;
   color: #4a4338;
-}
-
-.cost strong {
-  color: #8a6d2f;
 }
 
 .faq-item {

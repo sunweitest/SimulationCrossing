@@ -170,7 +170,7 @@
             <span class="qq-number">{{ QQ_NUMBER }}</span>
           </div>
           <p class="quota-modal-tip">
-            {{ qqCopied ? 'QQ 号已复制，去 QQ 搜索添加即可' : '加好友时备注「小说充值」，作者会尽快回复' }}
+            {{ qqCopied ? 'QQ 号已复制，去 QQ 搜索添加即可' : '加好友时备注「穿越次数」，作者会尽快回复' }}
           </p>
           <div class="quota-modal-actions">
             <button class="btn-pricing" @click="goPricing">查看定价与开通</button>

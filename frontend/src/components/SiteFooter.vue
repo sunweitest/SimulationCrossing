@@ -11,7 +11,7 @@
         <router-link to="/refund">退款政策</router-link>
       </nav>
       <p class="footer-meta">
-        © {{ year }} {{ LEGAL_META.site }} · 联系：<a :href="`mailto:${LEGAL_META.email}`">{{ LEGAL_META.email }}</a>
+        © {{ year }} {{ LEGAL_META.site }} · 联系：QQ {{ LEGAL_META.qq }}
       </p>
       <p class="footer-note">剧情由 AI 生成，仅供娱乐。</p>
     </div>

@@ -6,7 +6,8 @@
  */
 export const LEGAL_META = {
   operator: 'AI穿越模拟 运营者',
-  email: 'support@wanchuanyue.com',
+  email: '1306344250@qq.com',
+  qq: '1306344250',
   site: 'wanchuanyue.com',
   updated: '2026-11-03',
 }
