@@ -917,15 +917,15 @@ const backToHome = () => {
   max-width: 900px;
   height: 55vh;
   max-height: 520px;
-  background: rgba(10, 10, 25, 0.07);
-  backdrop-filter: blur(3px) saturate(115%);
-  -webkit-backdrop-filter: blur(3px) saturate(115%);
+  background: linear-gradient(180deg, rgba(8, 8, 18, 0.22), rgba(8, 8, 18, 0.36));
+  backdrop-filter: blur(4px) saturate(110%);
+  -webkit-backdrop-filter: blur(4px) saturate(110%);
   border: 1px solid rgba(255, 215, 150, 0.15);
   border-radius: 14px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
   padding: 24px 28px;
   color: #f0e6d3;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 10px rgba(0, 0, 0, 0.8);
 }
 
 .story-text {
