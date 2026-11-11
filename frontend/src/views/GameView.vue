@@ -9,6 +9,10 @@
     <!-- ===== 顶部信息栏 ===== -->
     <div class="top-bar">
       <div class="top-bar-left">
+        <button class="player-chip" @click="openProfile" title="查看当前角色">
+          <img v-if="playerAvatar" :src="playerAvatar" :alt="playerName" class="player-avatar">
+          <span v-else class="player-avatar player-avatar-fallback">{{ playerInitial }}</span>
+        </button>
         <span class="top-char-name">{{ gameStore.currentSession?.character_name }}</span>
         <span class="top-divider">·</span>
         <span>{{ gameStore.currentSession?.character_rank }}</span>
@@ -181,6 +185,50 @@
       </div>
     </Transition>
 
+    <!-- 当前角色详情 -->
+    <Transition name="fade">
+      <div v-if="showProfile" class="quota-modal-mask" @click.self="showProfile = false">
+        <div class="profile-modal">
+          <div class="profile-head">
+            <img v-if="playerAvatar" :src="playerAvatar" :alt="playerName" class="profile-avatar">
+            <span v-else class="profile-avatar profile-avatar-fallback">{{ playerInitial }}</span>
+            <div class="profile-title">
+              <h3>{{ playerName }}</h3>
+              <p>{{ profileRank }} · {{ gameStore.currentSession?.novel }}</p>
+              <p class="profile-timeline">{{ gameStore.currentSession?.timeline }}</p>
+            </div>
+          </div>
+
+          <div class="profile-stats">
+            <div><span class="ps-num">{{ playerGender }}</span><span class="ps-label">性别</span></div>
+            <div><span class="ps-num">{{ playerAge }}</span><span class="ps-label">年龄</span></div>
+            <div><span class="ps-num">{{ gameStore.currentSession?.points || 0 }}</span><span class="ps-label">积分</span></div>
+            <div><span class="ps-num">{{ currentTurn ?? '—' }}</span><span class="ps-label">已过回合</span></div>
+          </div>
+
+          <div v-if="currentMission" class="profile-mission">
+            <span class="pm-label">当前使命</span>
+            <strong>{{ currentMission.title }}</strong>
+            <p>{{ currentMission.goal }}</p>
+            <p class="pm-meta">
+              阶段 {{ (currentMission.stage_index || 0) + 1 }}/{{ currentMission.stage_count || 3 }}
+              · 剩 {{ currentMission.days_left ?? '—' }} 回合
+            </p>
+          </div>
+
+          <div v-if="playerBackground" class="profile-bg">
+            <h4>角色背景</h4>
+            <p>{{ playerBackground }}</p>
+          </div>
+
+          <div class="profile-actions">
+            <button class="btn-relations" @click="goRelations">人物关系</button>
+            <button class="btn-later" @click="showProfile = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
     <!-- 回合回溯 -->
     <Transition name="fade">
       <div v-if="showTurnsPanel" class="quota-modal-mask" @click.self="closeTurns">
@@ -302,7 +350,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
-import { gameAPI } from '@/api'
+import { gameAPI, communityAPI } from '@/api'
 import { WORLD_ART, heroOf, thumbOf, captionOf, bgLayers } from '@/utils/worldArt'
 import { AUTHOR_QQ } from '@/content/contact'
 
@@ -319,7 +367,52 @@ const loadFailed = ref(false)
 
 // 登录用户次数用完 → 弹窗引导充值
 const QQ_NUMBER = AUTHOR_QQ
+const showProfile = ref(false)
+const playerAvatar = ref('')
 const showQuotaModal = ref(false)
+const playerName = computed(() => gameStore.currentSession?.character_name || '我')
+const playerInitial = computed(() => (playerName.value || '我').trim().slice(0, 1))
+const profileRank = computed(() => gameStore.currentSession?.character_rank || '身份未定')
+const playerGender = computed(() => gameStore.currentSession?.character_gender || '—')
+const playerAge = computed(() => gameStore.currentSession?.character_age ?? '—')
+const playerBackground = computed(() => gameStore.currentSession?.character_background || '')
+const currentMission = computed(() => {
+  const session = gameStore.currentSession
+  return session?.mission_state?.mission || session?.current_scene?.mission || null
+})
+
+const goRelations = () => {
+  const s = gameStore.currentSession
+  if (!s) return
+  showProfile.value = false
+  router.push({ path: '/character-relations', query: { novel: s.novel, name: s.character_name, timeline: s.timeline } })
+}
+
+// 预设角色有头像；自定义角色没有，就用首字兜底
+const openProfile = async () => {
+  showProfile.value = true
+  const sid = gameStore.currentSession?.id
+  if (!sid || turns.value.length) return
+  try {
+    const list = await gameAPI.getTurns(sid)
+    turns.value = Array.isArray(list) ? list : []
+  } catch {
+    /* 只是显示用，拿不到就留「—」 */
+  }
+}
+
+const loadPlayerAvatar = async () => {
+  const session = gameStore.currentSession
+  if (!session?.novel || !session?.character_name) return
+  try {
+    const data = await communityAPI.getWorldCharacters(session.novel)
+    const hit = (data.characters || []).find((c) => c.name === session.character_name)
+    playerAvatar.value = hit?.image || ''
+  } catch {
+    playerAvatar.value = ''
+  }
+}
+
 const goPricing = () => {
   showQuotaModal.value = false
   router.push('/pricing')
@@ -560,6 +653,7 @@ onMounted(async () => {
   if (currentScene.value?.scene_image) {
     currentSceneImage.value = currentScene.value.scene_image
   }
+  loadPlayerAvatar()
 })
 
 const performAction = async (action) => {
@@ -823,9 +917,9 @@ const backToHome = () => {
   max-width: 900px;
   height: 55vh;
   max-height: 520px;
-  background: rgba(10, 10, 25, 0.2);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(10, 10, 25, 0.07);
+  backdrop-filter: blur(3px) saturate(115%);
+  -webkit-backdrop-filter: blur(3px) saturate(115%);
   border: 1px solid rgba(255, 215, 150, 0.15);
   border-radius: 14px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
@@ -873,9 +967,9 @@ const backToHome = () => {
   left: 0;
   right: 0;
   z-index: 5;
-  background: rgba(10, 10, 25, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(10, 10, 25, 0.38);
+  backdrop-filter: blur(7px) saturate(115%);
+  -webkit-backdrop-filter: blur(7px) saturate(115%);
   border-top: 1px solid rgba(255, 215, 150, 0.18);
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
   padding: 12px 28px 18px 28px;
@@ -1617,5 +1711,193 @@ const backToHome = () => {
   .mb-chip { padding: 2px 6px; font-size: 10.5px; }
   .mb-last { display: none; }
   .mission-panel { top: 84px; width: 92vw; padding: 12px 14px 10px; font-size: 12.5px; }
+}
+
+/* ===== 玩家头像与角色卡 ===== */
+.player-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  padding: 0;
+  border: 1px solid rgba(255, 215, 150, 0.45);
+  border-radius: 50%;
+  background: rgba(10, 10, 25, 0.35);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.18s, border-color 0.18s;
+}
+
+.player-chip:hover {
+  transform: translateY(-1px);
+  border-color: #e8cf9a;
+}
+
+.player-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.player-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  color: #f0e6d3;
+  background: linear-gradient(135deg, rgba(201, 162, 39, 0.55), rgba(80, 62, 30, 0.65));
+}
+
+.profile-modal {
+  width: min(460px, 92vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 22px 22px 18px;
+  border: 1px solid rgba(255, 215, 150, 0.35);
+  border-radius: 16px;
+  background: rgba(14, 14, 26, 0.94);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  color: #efe6d6;
+}
+
+.profile-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.profile-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 215, 150, 0.4);
+  flex-shrink: 0;
+}
+
+.profile-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: #f6ecd8;
+  background: linear-gradient(135deg, rgba(201, 162, 39, 0.6), rgba(70, 54, 26, 0.8));
+}
+
+.profile-title h3 {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+  letter-spacing: 0.06em;
+}
+
+.profile-title p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #c9bfa8;
+}
+
+.profile-timeline {
+  margin-top: 2px !important;
+  color: #a89f8b !important;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 18px 0 14px;
+}
+
+.profile-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 10px;
+  background: rgba(255, 215, 150, 0.09);
+}
+
+.ps-num {
+  font-size: 1.02rem;
+  color: #f3e6c6;
+}
+
+.ps-label {
+  font-size: 0.72rem;
+  color: #9c937f;
+}
+
+.profile-mission {
+  padding: 12px 14px;
+  border-left: 3px solid #c9a227;
+  border-radius: 8px;
+  background: rgba(201, 162, 39, 0.1);
+}
+
+.pm-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: #c9a227;
+}
+
+.profile-mission strong {
+  font-size: 0.98rem;
+}
+
+.profile-mission p {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: #d6ccb6;
+}
+
+.pm-meta {
+  color: #9c937f !important;
+  font-size: 0.76rem !important;
+}
+
+.profile-bg {
+  margin-top: 14px;
+}
+
+.profile-bg h4 {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  color: #c9bfa8;
+  font-weight: 500;
+}
+
+.profile-bg p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.75;
+  color: #d6ccb6;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.profile-actions button {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.btn-relations {
+  background: rgba(201, 162, 39, 0.9);
+  color: #1d1a12;
+  font-weight: 600;
 }
 </style>
