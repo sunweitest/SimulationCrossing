@@ -354,6 +354,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { gameAPI, communityAPI } from '@/api'
+import { WORLD_AMBIENCE, AMBIENCE_VOLUME, AMBIENCE_DUCKED } from '@/content/ambience'
 import { WORLD_ART, heroOf, thumbOf, captionOf, bgLayers } from '@/utils/worldArt'
 import { AUTHOR_QQ } from '@/content/contact'
 
@@ -449,9 +450,104 @@ let currentSfxAudio = null
 const toggleSound = () => {
   soundOn.value = !soundOn.value
   localStorage.setItem('sfx_enabled', soundOn.value ? '1' : '0')
-  if (!soundOn.value && currentSfxAudio) {
-    currentSfxAudio.pause()
-    currentSfxAudio = null
+  if (!soundOn.value) {
+    if (currentSfxAudio) {
+      currentSfxAudio.pause()
+      currentSfxAudio = null
+    }
+    stopAmbience(400)
+  } else if (gameStore.currentSession?.novel) {
+    startAmbience(gameStore.currentSession.novel)
+  }
+}
+
+// 环境音床：每世界一条 20 秒循环，默认开，音量压得很低
+let ambientAudio = null
+let ambientSrc = ''
+let ambientUnlockBound = false
+let ambientUnlock = null
+
+const fadeTo = (audio, target, ms = 600) => {
+  if (!audio) return
+  const from = audio.volume
+  const steps = 12
+  let i = 0
+  const timer = setInterval(() => {
+    i += 1
+    const v = from + ((target - from) * i) / steps
+    audio.volume = Math.min(1, Math.max(0, v))
+    if (i >= steps) clearInterval(timer)
+  }, ms / steps)
+}
+
+const detachUnlock = () => {
+  if (!ambientUnlock) return
+  document.removeEventListener('pointerdown', ambientUnlock)
+  document.removeEventListener('keydown', ambientUnlock)
+  ambientUnlock = null
+  ambientUnlockBound = false
+}
+
+const stopAmbience = (fadeMs = 500) => {
+  if (!ambientAudio) return
+  const audio = ambientAudio
+  ambientAudio = null
+  ambientSrc = ''
+  fadeTo(audio, 0, fadeMs)
+  setTimeout(() => {
+    try { audio.pause() } catch { /* 忽略 */ }
+  }, fadeMs + 80)
+}
+
+const startAmbience = async (novel) => {
+  const src = WORLD_AMBIENCE[novel] || ''
+  if (!soundOn.value || !src) {
+    if (!src) stopAmbience(300)
+    return
+  }
+  if (ambientAudio && ambientSrc === src) {
+    if (ambientAudio.paused) ambientAudio.play().catch(() => {})
+    return
+  }
+  stopAmbience(300)
+  const audio = new Audio(src)
+  audio.loop = true
+  audio.muted = true      // 先静音播放：浏览器允许，避免被自动播放策略拦掉
+  audio.volume = 0
+  ambientAudio = audio
+  ambientSrc = src
+  const unmute = () => {
+    if (!ambientAudio) return
+    ambientAudio.muted = false
+    fadeTo(ambientAudio, AMBIENCE_VOLUME, 1200)
+    detachUnlock()
+  }
+  try {
+    await audio.play()
+    // 静音状态下已在播放，等用户第一次交互再出声
+    if (!ambientUnlockBound) {
+      ambientUnlockBound = true
+      ambientUnlock = unmute
+      document.addEventListener('pointerdown', ambientUnlock)
+      document.addEventListener('keydown', ambientUnlock)
+    }
+  } catch {
+    // 连静音播放都被拒（极少数策略）：退回到「等手势再播」
+    if (!ambientUnlockBound) {
+      ambientUnlockBound = true
+      ambientUnlock = () => {
+        if (!ambientAudio) return
+        ambientAudio.muted = false
+        ambientAudio.play()
+          .then(() => {
+            fadeTo(ambientAudio, AMBIENCE_VOLUME, 1200)
+            detachUnlock()
+          })
+          .catch(() => {})
+      }
+      document.addEventListener('pointerdown', ambientUnlock)
+      document.addEventListener('keydown', ambientUnlock)
+    }
   }
 }
 
@@ -472,6 +568,13 @@ const playSfx = (sfx, sceneKey = '') => {
     audio.volume = 0.5
     currentSfxAudio = audio
     audio.play().catch(() => { /* 浏览器不给放就静默 */ })
+    // 台词/打斗音效期间把环境音压下去，避免糊在一起
+    if (ambientAudio) {
+      fadeTo(ambientAudio, AMBIENCE_DUCKED, 200)
+      setTimeout(() => {
+        if (ambientAudio) fadeTo(ambientAudio, AMBIENCE_VOLUME, 800)
+      }, Math.max(1200, ((sfx.duration || 2) + 0.6) * 1000))
+    }
   } catch {
     /* 播放失败不影响剧情 */
   }
@@ -541,6 +644,10 @@ const measureBars = () => {
   if (bottom) root.style.setProperty('--bottom-bar-h', bottom + 'px')
   if (top) root.style.setProperty('--top-bar-h', top + 'px')
 }
+watch(() => gameStore.currentSession?.novel, (novel) => {
+  if (novel) startAmbience(novel)
+})
+
 watch(() => gameStore.currentSession?.current_scene, async () => {
   await nextTick()
   measureBars()
@@ -663,6 +770,11 @@ const typewriterEffect = (text) => {
   }, 20)
 }
 
+onBeforeUnmount(() => {
+  stopAmbience(150)
+  detachUnlock()
+})
+
 onMounted(async () => {
   loadQuota()
   const sessionId = route.params.id
@@ -693,6 +805,7 @@ onMounted(async () => {
     currentSceneImage.value = currentScene.value.scene_image
   }
   loadPlayerAvatar()
+  startAmbience(gameStore.currentSession?.novel)
 })
 
 const performAction = async (action) => {
