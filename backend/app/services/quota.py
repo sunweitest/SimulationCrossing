@@ -23,6 +23,11 @@ def user_unlimited_key(user_id) -> str:
     return f"rate_limit:user:{user_id}:unlimited"
 
 
+def user_unlimited_used_key(user_id) -> str:
+    """不限次卡当天的实际用量（单日硬上限用）"""
+    return f"rate_limit:user:{user_id}:unlimited_used:{date.today()}"
+
+
 def client_ip(request) -> str:
     """取真实客户端 IP。
 
@@ -59,6 +64,9 @@ async def get_quota_status(redis_client, request, user=None) -> dict:
         used = int(await redis_client.get(user_daily_key(user.id)) or 0)
         extra = int(await redis_client.get(user_extra_key(user.id)) or 0)
         unlimited = bool(await redis_client.exists(user_unlimited_key(user.id)))
+        unlimited_used = 0
+        if unlimited:
+            unlimited_used = int(await redis_client.get(user_unlimited_used_key(user.id)) or 0)
         is_guest = False
     else:
         daily_limit = settings.DAILY_FREE_MESSAGES
@@ -77,7 +85,12 @@ async def get_quota_status(redis_client, request, user=None) -> dict:
         "used_today": used,
         "daily_remaining": daily_remaining,
         "extra_quota": max(0, extra),
-        "is_unlimited": unlimited,
+        "is_unlimited": unlimited and unlimited_used < settings.DAILY_UNLIMITED_CAP,
+        "unlimited_cap": settings.DAILY_UNLIMITED_CAP if unlimited else None,
+        "unlimited_used": unlimited_used if unlimited else None,
         # 还能用几次：不限次数为 None；否则每日剩余 + 额外配额
-        "remaining": None if unlimited else daily_remaining + max(0, extra),
+        "remaining": (
+            None if (unlimited and unlimited_used < settings.DAILY_UNLIMITED_CAP)
+            else (0 if unlimited else daily_remaining + max(0, extra))
+        ),
     }

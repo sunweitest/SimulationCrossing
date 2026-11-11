@@ -11,6 +11,7 @@ from app.services.quota import (
     user_daily_key,
     user_extra_key,
     user_unlimited_key,
+    user_unlimited_used_key,
     guest_daily_key,
 )
 
@@ -58,6 +59,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     if await self.redis_client.exists(unlimited_key):
                         is_unlimited = True
                         use_daily_count = False
+                        # 不限次卡也有单日硬上限：成本按回合走，脚本刷起来是真金白银
+                        cap = settings.DAILY_UNLIMITED_CAP
+                        cap_key = user_unlimited_used_key(user_id)
+                        used_today = int(await self.redis_client.get(cap_key) or 0)
+                        if used_today >= cap:
+                            return JSONResponse(
+                                status_code=429,
+                                content={
+                                    "detail": {
+                                        "message": f"不限次卡今天已用 {cap} 次（防脚本上限），明天 0 点恢复",
+                                        "needs_login": False,
+                                        "remaining": 0,
+                                        "cap_reached": True,
+                                    }
+                                }
+                            )
 
                     # 2. 检查额外配额
                     if not is_unlimited:
@@ -112,7 +129,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if is_action and response.status_code < 400 and limit_key:
             try:
                 if is_unlimited:
-                    pass  # 包月用户不扣次数
+                    cap_key = user_unlimited_used_key(user_id)
+                    await self.redis_client.incr(cap_key)
+                    await self.redis_client.expire(cap_key, 86400)
                 elif not use_daily_count:
                     # 使用额外配额的用户：扣减额外配额
                     extra_key = user_extra_key(user_id)

@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     # 次数限制配置
     DAILY_FREE_MESSAGES: int = 5
     DAILY_LOGGED_IN_EXTRA: int = 3
+    DAILY_UNLIMITED_CAP: int = 50  # 不限次卡的单日硬上限（防脚本）
 
     # 场景图片匹配
     SCENE_IMAGE_DIR: str = "frontend/public/images/scene"  # 图片目录，相对项目根目录
