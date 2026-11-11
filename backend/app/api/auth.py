@@ -3,15 +3,53 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 import logging
+import re
+from typing import Optional
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.models.models import User
 from app.core.timeutil import now_cn
-from app.schemas.schemas import UserCreate, UserLogin, Token, UserResponse
+from app.schemas.schemas import UserCreate, UserLogin, Token, UserResponse, NicknameIn
 from datetime import timedelta
 from app.core.config import settings
+from app.api.deps import get_current_active_user
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+
+
+NICKNAME_MIN, NICKNAME_MAX = 2, 12
+_NICKNAME_RESERVED = ("官方", "管理员", "客服", "系统", "gm", "admin", "闯关者", "游客")
+_NICKNAME_FORBIDDEN_PAT = re.compile(r"[<>\[\]{}|\\^`]")
+
+
+def normalize_nickname(raw: Optional[str]) -> Optional[str]:
+    """校验并规整昵称。
+
+    - 空 / 全空白 -> None（走「闯关者 + id」兜底，不强制用户起名）
+    - 2-12 个字符（中文按 1 个字符算），去掉首尾空白、压缩内部连续空格
+    - 拒绝手机号、邮箱、网址：不让用户把联系方式写进公开榜单
+    - 拒绝官方/系统类保留词，避免冒充
+    """
+    if raw is None:
+        return None
+    name = " ".join(str(raw).split())
+    if not name:
+        return None
+    if not (NICKNAME_MIN <= len(name) <= NICKNAME_MAX):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"昵称需要 {NICKNAME_MIN}-{NICKNAME_MAX} 个字符",
+        )
+    lowered = name.lower()
+    if "@" in name or "http" in lowered or "www." in lowered or re.search(r"\.(com|cn|net|org)\b", lowered):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="昵称不能包含邮箱或网址")
+    if re.fullmatch(r"[+\d][\d\s\-()]{5,}", name):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="昵称不能是手机号")
+    if any(word in lowered for word in _NICKNAME_RESERVED):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="该昵称不可用，请换一个")
+    if _NICKNAME_FORBIDDEN_PAT.search(name):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="昵称包含不支持的字符")
+    return name
 
 
 @router.post("/register", response_model=Token, summary="注册账号", responses={400: {"description": "未同意条款 / 缺少邮箱或手机号 / 已被注册"}})
@@ -57,11 +95,15 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
                 detail="该手机号已被注册"
             )
 
+    # 昵称可选；不填就留空，展示时按「闯关者 + id」兜底
+    nickname = normalize_nickname(user_data.nickname)
+
     # 创建用户
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         email=user_data.email,
         phone=user_data.phone,
+        nickname=nickname,
         hashed_password=hashed_password,
         terms_accepted_at=now_cn()
     )
@@ -129,3 +171,38 @@ async def login(login_data: UserLogin, db: AsyncSession = Depends(get_db)):
 
     user_response = UserResponse.from_orm(user)
     return Token(access_token=access_token, user=user_response)
+
+
+@router.get("/me", response_model=UserResponse, summary="当前用户信息")
+async def me(current_user: User = Depends(get_current_active_user)):
+    """
+    返回当前登录用户的账号信息（含昵称）。
+
+    - **权限**：需要登录
+    - **注意**：`email` / `phone` 只返回给用户自己，天梯榜不返回这两项
+    """
+    return UserResponse.from_orm(current_user)
+
+
+@router.put(
+    "/me/nickname",
+    response_model=UserResponse,
+    summary="修改昵称",
+    responses={422: {"description": "昵称长度/格式不合法，或命中保留词"}},
+)
+async def update_nickname(
+    payload: NicknameIn,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    修改天梯展示昵称，立刻生效。
+
+    - **权限**：需要登录，只能改自己的
+    - **规则**：2-12 个字符；不能是手机号、邮箱、网址；不能用「官方」「管理员」「闯关者」等保留词
+    - **错误**：`422` 格式不合法
+    """
+    current_user.nickname = normalize_nickname(payload.nickname)
+    await db.commit()
+    await db.refresh(current_user)
+    return UserResponse.from_orm(current_user)

@@ -26,6 +26,18 @@ export const useAuthStore = defineStore('auth', () => {
     return response
   }
 
+  const setUser = (u) => {
+    user.value = u
+    localStorage.setItem('user', JSON.stringify(u))
+  }
+
+  // 修改天梯昵称：后端校验通过后回写本地
+  const updateNickname = async (nickname) => {
+    const updated = await authAPI.updateNickname(nickname)
+    setUser(updated)
+    return updated
+  }
+
   const logout = () => {
     token.value = ''
     user.value = null
@@ -37,6 +49,8 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     user,
     isAuthenticated,
+    setUser,
+    updateNickname,
     login,
     register,
     logout

@@ -76,6 +76,18 @@
             </div>
 
             <div class="input-group">
+              <label>天梯昵称<span class="label-hint">（选填）</span></label>
+              <input
+                v-model="registerForm.nickname"
+                type="text"
+                class="input"
+                maxlength="12"
+                placeholder="留空则自动生成「闯关者xxxx」"
+              />
+              <p class="field-hint">会显示在天梯排行榜上，2-12 个字，别填手机号或邮箱</p>
+            </div>
+
+            <div class="input-group">
               <label>密码</label>
               <input
                 v-model="registerForm.password"
@@ -152,6 +164,7 @@ const loginForm = reactive({
 const registerForm = reactive({
   email: '',
   phone: '',
+  nickname: '',
   password: '',
   confirmPassword: ''
 })
@@ -182,6 +195,7 @@ watch(() => props.visible, (val) => {
     loginForm.password = ''
     registerForm.email = ''
     registerForm.phone = ''
+    registerForm.nickname = ''
     registerForm.password = ''
     registerForm.confirmPassword = ''
   }
@@ -220,6 +234,16 @@ const handleRegister = async () => {
     return
   }
 
+  const nick = registerForm.nickname.trim()
+  if (nick && (nick.length < 2 || nick.length > 12)) {
+    error.value = '昵称需要 2-12 个字'
+    return
+  }
+  if (nick && (/@/.test(nick) || /^[+\d][\d\s\-()]{5,}$/.test(nick))) {
+    error.value = '昵称不能是手机号或邮箱'
+    return
+  }
+
   if (registerForm.password.length < 6) {
     error.value = '密码至少需要6位'
     return
@@ -243,6 +267,7 @@ const handleRegister = async () => {
       email: registerForm.email || null,
       phone: registerForm.phone || null,
       password: registerForm.password,
+      nickname: nick || null,
       agree_terms: true
     })
     close()
@@ -255,6 +280,8 @@ const handleRegister = async () => {
 </script>
 
 <style scoped>
+.label-hint { color: #999; font-weight: 400; font-size: 0.85em; }
+.field-hint { margin: 6px 0 0; font-size: 0.8em; color: #999; line-height: 1.4; }
 /* 同意条款勾选 */
 .agree-row { margin: 4px 0 14px; }
 .agree-label {

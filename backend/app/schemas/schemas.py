@@ -20,6 +20,11 @@ class UserCreate(BaseModel):
     email: Optional[EmailStr] = Field(None, description="邮箱，与 phone 至少填一个")
     phone: Optional[str] = Field(None, description="手机号，与 email 至少填一个")
     password: str = Field(..., min_length=6, description="登录密码，至少 6 位")
+    nickname: Optional[str] = Field(
+        None,
+        max_length=32,
+        description="天梯展示昵称，可不填；不填时按「闯关者 + 用户 id」自动生成。2-12 个字符，禁止填手机号/邮箱/网址",
+    )
     # 必须勾选同意《服务条款》《隐私政策》才能注册
     agree_terms: bool = Field(False, description="必须为 true，表示已同意《服务条款》《隐私政策》")
 
@@ -36,11 +41,20 @@ class UserResponse(BaseModel):
     id: int
     email: Optional[str]
     phone: Optional[str]
+    nickname: Optional[str] = None
     is_active: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class NicknameIn(BaseModel):
+    """修改昵称请求"""
+
+    model_config = ConfigDict(json_schema_extra={"example": {"nickname": "青衫客"}})
+
+    nickname: str = Field(..., max_length=32, description="新昵称，2-12 个字符")
 
 
 class Token(BaseModel):

@@ -36,7 +36,9 @@ api.interceptors.response.use(
 // 认证API
 export const authAPI = {
   register: (data) => api.post('/auth/register', data),
-  login: (data) => api.post('/auth/login', data)
+  login: (data) => api.post('/auth/login', data),
+  me: () => api.get('/auth/me'),
+  updateNickname: (nickname) => api.put('/auth/me/nickname', { nickname })
 }
 
 // 游戏API

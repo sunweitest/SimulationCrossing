@@ -13,6 +13,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.models import (
     CharacterTimeline,
+    User,
     GameSession,
     NovelConfig,
     PresetCharacter,
@@ -245,11 +246,17 @@ async def vote_world(
 
 # --------------------------------------------------------------- 天梯
 @router.get("/ladder", summary="天梯榜")
-async def ladder(world: Optional[str] = None, limit: int = 20, db: AsyncSession = Depends(get_db)):
+async def ladder(
+    world: Optional[str] = None,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
     """
     按世界统计最高分 / 平均分 / 参与人数，并给出各世界的高分存档。
 
-    - **权限**：公开
+    - **权限**：公开（带登录态时会给自己的记录打 `is_me`）
+    - **玩家名**：只返回昵称（未设置时兜底为「闯关者 + 用户 id」），**不返回邮箱和手机号**
     - **注意**：返回的高分存档 id 只能看到「积分/成就」摘要；直接读存档详情仍受归属校验（`403`）
     """
     limit = max(1, min(limit, 100))
@@ -272,14 +279,28 @@ async def ladder(world: Optional[str] = None, limit: int = 20, db: AsyncSession 
     ]
     worlds.sort(key=lambda x: (-x["top_points"], -x["sessions"]))
 
-    tq = select(GameSession).order_by(desc(GameSession.points), desc(GameSession.updated_at))
+    tq = (
+        select(GameSession, User.id, User.nickname)
+        .outerjoin(User, User.id == GameSession.user_id)
+        .order_by(desc(GameSession.points), desc(GameSession.updated_at))
+    )
     if world and world not in ("", "all"):
         tq = tq.where(GameSession.novel == world)
     tq = tq.limit(limit)
+
+    def display_name(user_id, nickname) -> str:
+        # 老用户注册时没有昵称：用「闯关者 + 四位 id」兜底，稳定且不含个人信息
+        if user_id is None:
+            return "游客"
+        return nickname or f"闯关者{user_id:04d}"
+
     top = [
         {
             "rank": i + 1,
             "session_id": s.id,
+            "player": display_name(uid, nick),
+            "is_guest": uid is None,
+            "is_me": bool(current_user and uid == current_user.id),
             "character_name": s.character_name,
             "character_rank": s.character_rank,
             "novel": s.novel,
@@ -287,6 +308,6 @@ async def ladder(world: Optional[str] = None, limit: int = 20, db: AsyncSession 
             "points": s.points,
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
         }
-        for i, s in enumerate((await db.execute(tq)).scalars().all())
+        for i, (s, uid, nick) in enumerate((await db.execute(tq)).all())
     ]
     return {"worlds": worlds, "top": top, "world": world or "all"}

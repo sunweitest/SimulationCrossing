@@ -12,6 +12,8 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=True)
     phone = Column(String, unique=True, index=True, nullable=True)
     hashed_password = Column(String, nullable=False)
+    # 天梯展示用昵称；为空时按「闯关者 + 用户 id」兜底，绝不展示邮箱/手机号
+    nickname = Column(String(32), nullable=True)
     is_active = Column(Boolean, default=True)
     # 注册时勾选同意《服务条款》《隐私政策》的时间（合规留痕）
     terms_accepted_at = Column(DateTime, nullable=True)

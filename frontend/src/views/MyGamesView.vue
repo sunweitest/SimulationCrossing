@@ -7,6 +7,28 @@
 
     <h1>📋 我的游戏</h1>
 
+    <!-- 天梯昵称：只展示昵称，不展示邮箱/手机号 -->
+    <div class="nick-card">
+      <div class="nick-info">
+        <span class="nick-label">天梯昵称</span>
+        <strong class="nick-value">{{ displayNick }}</strong>
+        <span v-if="!authStore.user?.nickname" class="nick-tip">还没起名字，榜上暂时这样显示</span>
+      </div>
+      <div class="nick-edit">
+        <input
+          v-model="nickDraft"
+          class="nick-input"
+          maxlength="12"
+          placeholder="2-12 个字，别填联系方式"
+          @keyup.enter="saveNick"
+        />
+        <button class="btn btn-sm btn-primary" :disabled="nickSaving || !nickDraft.trim()" @click="saveNick">
+          {{ nickSaving ? '保存中…' : '保存' }}
+        </button>
+      </div>
+    </div>
+    <p v-if="nickMsg" class="nick-msg" :class="{ err: nickIsErr }">{{ nickMsg }}</p>
+
     <!-- 加载中 -->
     <div v-if="gameStore.isSessionsLoading" class="loading">
       <div class="spinner"></div>
@@ -119,11 +141,41 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '@/stores/game'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
+
+const nickDraft = ref(authStore.user?.nickname || '')
+const nickSaving = ref(false)
+const nickMsg = ref('')
+const nickIsErr = ref(false)
+
+const displayNick = computed(() => {
+  const u = authStore.user
+  if (!u) return ''
+  return u.nickname || `闯关者${String(u.id || 0).padStart(4, '0')}`
+})
+
+const saveNick = async () => {
+  const value = nickDraft.value.trim()
+  if (!value || nickSaving.value) return
+  nickSaving.value = true
+  nickMsg.value = ''
+  nickIsErr.value = false
+  try {
+    await authStore.updateNickname(value)
+    nickMsg.value = '昵称已更新，下次刷新天梯就能看到'
+  } catch (err) {
+    nickIsErr.value = true
+    nickMsg.value = err.response?.data?.detail || '保存失败，请重试'
+  } finally {
+    nickSaving.value = false
+  }
+}
 const gameStore = useGameStore()
 
 const error = ref('')
@@ -201,6 +253,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.nick-card {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  margin: 0 0 18px; padding: 12px 16px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.nick-info { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nick-label { font-size: 13px; opacity: 0.6; }
+.nick-value { font-size: 16px; letter-spacing: 0.5px; }
+.nick-tip { font-size: 12px; opacity: 0.5; }
+.nick-edit { display: flex; gap: 8px; align-items: center; }
+.nick-input {
+  width: 180px; padding: 6px 10px; border-radius: 8px; font-size: 14px;
+  background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.12); color: inherit;
+}
+.nick-msg { margin: -10px 0 16px; font-size: 13px; color: #8fbf8f; }
+.nick-msg.err { color: #e08a8a; }
 /* 页面导航 */
 .page-nav {
   margin-bottom: 1rem;

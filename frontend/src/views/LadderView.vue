@@ -42,11 +42,14 @@
       <div class="board">
         <div v-if="top.length === 0" class="empty">还没有人上榜，去玩一局就是第一名。</div>
         <ol v-else class="top-list">
-          <li v-for="row in top" :key="row.session_id" class="top-row" :class="'rank-' + row.rank">
+          <li v-for="row in top" :key="row.session_id" class="top-row" :class="['rank-' + row.rank, { 'is-me-row': row.is_me }]">
             <span class="rank">{{ medal(row.rank) }}</span>
             <span class="who">
-              <strong>{{ row.character_name }}</strong>
-              <span class="who-sub">{{ row.character_rank }} · {{ row.novel }} · {{ row.timeline }}</span>
+              <strong>
+                {{ row.player }}
+                <em v-if="row.is_me" class="me-tag">你</em>
+              </strong>
+              <span class="who-sub">{{ row.character_name }} · {{ row.character_rank }} · {{ row.novel }} · {{ row.timeline }}</span>
             </span>
             <span class="points">{{ row.points }}<small>分</small></span>
           </li>
@@ -88,7 +91,8 @@ const COVERS = {
   '三国演义': 'sanguo', '水浒传': 'shuihu', '明代': 'mingdai', '清代': 'qingdai',
   '西游记': 'xiyou', '金瓶梅': 'jinpingmei', '废土末世': 'wasteland',
   '红楼梦': 'hongloumeng', '封神演义': 'fengshen', '武侠江湖': 'wuxia',
-  '仙侠修真': 'xianxia', '大唐长安·天宝末年': 'datang', '北宋汴京之变': 'bianjing'
+  '仙侠修真': 'xianxia', '大唐长安·天宝末年': 'datang', '北宋汴京之变': 'bianjing',
+  '都市修真': 'urban', '日常生活': 'daily'
 }
 const coverOf = (novel) => `/images/covers/${COVERS[novel] || 'sanguo'}.webp`
 
@@ -116,6 +120,12 @@ onMounted(load)
 </script>
 
 <style scoped>
+.me-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 8px;
+  font-style: normal; font-size: 11px; line-height: 1.5;
+  background: rgba(201, 168, 106, 0.18); color: #c9a86a; border: 1px solid rgba(201, 168, 106, 0.4);
+}
+.top-row.is-me-row { background: rgba(201, 168, 106, 0.06); }
 .ladder-page {
   position: relative;
   min-height: 100vh;
