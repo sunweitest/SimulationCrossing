@@ -198,11 +198,14 @@ async def create_game_session(
                 detail="预设角色不存在"
             )
 
+    # 身份改成选填后，空字符串不能直接落库（提示词里会出现「身份：」后面空白）
+    normalized_rank = " ".join((character.rank or "").split()) or "未知"
+
     session_character = {
         "name": character.name,
         "gender": character.gender,
         "age": character.age,
-        "rank": character.rank,
+        "rank": normalized_rank,
         "background": character.background,
         "starting_points": character.starting_points
     }

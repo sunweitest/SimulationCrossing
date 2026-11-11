@@ -94,7 +94,7 @@ class CharacterCreate(BaseModel):
     name: str = Field(..., description="角色名；preset 时必须与预设角色一致")
     gender: str = Field(..., description="性别")
     age: int = Field(..., ge=1, description="年龄（自定义角色要求 ≥1，页面默认 ≥18）")
-    rank: str = Field(..., description="身份，如 皇帝 / 士兵 / 丫鬟")
+    rank: Optional[str] = Field(None, max_length=20, description="身份，选填；留空按「未知」处理")
     background: Optional[str] = Field(None, description="角色背景，自定义角色会据此生成使命")
     novel: str = Field(..., description="世界名，如 三国演义 / 红楼梦 / 废土末世")
     timeline: str = Field(..., description="时间节点，需在该世界的时间节点列表内")

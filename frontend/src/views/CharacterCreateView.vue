@@ -236,25 +236,13 @@
               </div>
 
               <div class="input-group">
-                <label>初始身份</label>
-                <select v-model="form.rank" class="input">
-                  <option v-if="form.rank && !standardRanks.includes(form.rank)" :value="form.rank">{{ form.rank }}</option>
-                  <optgroup label="皇族贵胄">
-                    <option>皇帝</option><option>皇后</option><option>太子</option>
-                    <option>皇子</option><option>公主</option><option>王爷</option>
-                    <option>王妃</option><option>贵妃</option>
-                  </optgroup>
-                  <optgroup label="将相官吏">
-                    <option>将军</option><option>军师</option><option>士兵</option>
-                    <option>文官</option><option>小吏</option><option>太监</option>
-                  </optgroup>
-                  <optgroup label="江湖民间">
-                    <option>侠客</option><option>读书人</option><option>商人</option>
-                    <option>大小姐</option><option>平民</option><option>宫女</option>
-                    <option>道士</option><option>僧人</option><option>郎中</option>
-                  </optgroup>
-                  <optgroup label="其他"><option>未知</option></optgroup>
-                </select>
+                <label>初始身份<span class="label-hint">选填</span></label>
+                <input
+                  v-model="form.rank"
+                  class="input"
+                  maxlength="20"
+                  placeholder="自己写，例如：锦衣卫校尉、戏班班主"
+                />
               </div>
 
               <div class="input-group">
@@ -398,7 +386,6 @@ const canSubmitSuggestion = computed(
   () => newSuggestion.value.title.trim().length >= 2 && newSuggestion.value.summary.trim().length >= 10
 )
 const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
-const standardRanks = ['皇帝','皇后','太子','皇子','公主','王爷','王妃','贵妃','将军','军师','士兵','文官','小吏','太监','侠客','读书人','商人','大小姐','平民','宫女','道士','僧人','郎中','未知']
 const myCharacters = ref([])        // 当前世界里我自己的自定义角色
 const editingCustomId = ref(null)   // 正在修改的自定义角色 id（null = 新建）
 
@@ -408,7 +395,7 @@ const form = ref({
   name: '',
   gender: '男性',
   age: 25,
-  rank: '未知',
+  rank: '',
   background: '',
   starting_points: 0
 })
@@ -612,7 +599,7 @@ const chooseCustom = () => {
   characterType.value = 'custom'
   form.value.name = ''
   form.value.age = 20
-  form.value.rank = '未知'
+  form.value.rank = ''
   form.value.background = ''
   form.value.starting_points = 0
   form.value.timeline = timelines.value[0] || ''
@@ -789,7 +776,7 @@ watch(characterType, () => {
   if (characterType.value === 'custom' && !editingCustomId.value) {
     form.value.name = ''
     form.value.age = 20
-    form.value.rank = '未知'
+    form.value.rank = ''
     form.value.background = ''
     form.value.starting_points = 0
   } else {
@@ -836,7 +823,7 @@ const startGame = async () => {
       name: characterSource.name,
       gender: characterSource.gender,
       age,
-      rank: characterSource.rank,
+      rank: characterSource.rank === '未知' ? '' : characterSource.rank,
       background: characterSource.background || '',
       novel: form.value.novel,
       timeline: form.value.timeline,
@@ -1795,12 +1782,13 @@ textarea.input {
   gap: 8px;
   margin-bottom: 10px;
   font-size: 0.86rem;
-  color: #8a8578;
+  color: #cfc4a8;
 }
 
 .suggest-title strong {
-  font-size: 0.95rem;
-  color: #2f2a22;
+  font-size: 1rem;
+  color: #ffe9a8;
+  text-shadow: 0 1px 6px rgba(201, 162, 39, 0.45);
 }
 
 .suggest-form {
@@ -1841,7 +1829,16 @@ textarea.input {
 
 .suggest-count {
   font-size: 0.75rem;
-  color: #a29a89;
+  color: #cfc4a8;
+}
+
+.label-hint {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(201, 162, 39, 0.22);
+  color: #c9a227;
+  font-size: 0.7rem;
 }
 
 .suggest-submit {
@@ -1938,6 +1935,6 @@ textarea.input {
 .suggest-empty {
   margin: 12px 0 0;
   font-size: 0.82rem;
-  color: #a29a89;
+  color: #cfc4a8;
 }
 </style>
