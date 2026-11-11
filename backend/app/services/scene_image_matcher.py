@@ -199,15 +199,21 @@ class SceneImageMatcher:
             specific = sum(1 for t in self._tags if t != ["通用"])
             logger.info("TAGS: %d 张图，其中 %d 张为世界专属", len(self._tags), specific)
 
+    # 现代都市题材：「通用」图库全是古装场景，不能拿来配写字楼和地铁
+    MODERN_WORLDS = {"都市修真", "日常生活", "都市霸总"}
+
     def _allowed_mask(self, novel: str):
         """该世界可以用的图片：通用 + 本世界专属；没有标签时返回 None"""
         if not self._tags or not novel:
             return None
         if novel in self._mask_cache:
             return self._mask_cache[novel]
-        mask = np.array(
-            [("通用" in t) or (novel in t) for t in self._tags], dtype=bool
-        )
+        if novel in self.MODERN_WORLDS:
+            mask = np.array([novel in t for t in self._tags], dtype=bool)
+        else:
+            mask = np.array(
+                [("通用" in t) or (novel in t) for t in self._tags], dtype=bool
+            )
         self._mask_cache[novel] = mask
         return mask
 
