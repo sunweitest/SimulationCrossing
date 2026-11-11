@@ -20,5 +20,5 @@ export const WORLD_AMBIENCE = {
   '日常生活': '/audio/amb/amb-daily.mp3',
 }
 
-export const AMBIENCE_VOLUME = 0.22
-export const AMBIENCE_DUCKED = 0.08
+export const AMBIENCE_VOLUME = 0.32
+export const AMBIENCE_DUCKED = 0.10

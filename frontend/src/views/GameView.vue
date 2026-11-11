@@ -644,9 +644,13 @@ const measureBars = () => {
   if (bottom) root.style.setProperty('--bottom-bar-h', bottom + 'px')
   if (top) root.style.setProperty('--top-bar-h', top + 'px')
 }
-watch(() => gameStore.currentSession?.novel, (novel) => {
-  if (novel) startAmbience(novel)
-})
+watch(
+  () => gameStore.currentSession?.novel,
+  (novel) => {
+    if (novel) startAmbience(novel)
+  },
+  { immediate: true }
+)
 
 watch(() => gameStore.currentSession?.current_scene, async () => {
   await nextTick()

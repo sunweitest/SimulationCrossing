@@ -66,6 +66,8 @@ def to_mp3(wav_bytes: bytes, dst: Path) -> float:
     try:
         subprocess.run(
             ["ffmpeg", "-y", "-loglevel", "error", "-i", tmp_path,
+             # 统一响度：不同世界的底噪原始电平差很多，不归一会有的世界几乎听不见
+             "-af", "loudnorm=I=-18:TP=-2:LRA=9",
              "-ac", "1", "-ar", "24000", "-b:a", "64k", str(dst)],
             check=True,
         )
