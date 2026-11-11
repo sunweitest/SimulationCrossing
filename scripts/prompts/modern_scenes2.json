@@ -1,0 +1,13 @@
+{
+  "size": "1280*720",
+  "style": "当代都市写实场景概念图，电影感，低饱和，克制的自然光与人工光源。35mm 镜头质感，浅景深，轻微颗粒。构图 16:9，有人物时只出现背影或侧影，不给正脸特写。不要出现任何文字、字幕、水印、logo、界面 UI、二维码。不要二次元，不要卡通，不要过曝。",
+  "negative": "text, letters, watermark, logo, signature, UI, border, frame, cartoon, anime, cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed hands, extra limbs, duplicate subject, plastic look, ancient chinese clothing, palace, hanfu, swordsman, horse, calligraphy",
+  "items": [
+    {"name": "地下室配电房与手电光", "kind": "scene", "prompt": "老旧居民楼的地下室配电房，墙面斑驳，一排灰色配电柜上贴着掉色的警示标签，地上有积水和电缆，一道手电光照在柜门上，空气里浮着灰。"},
+    {"name": "老式居民楼楼道声控灯", "kind": "scene", "prompt": "老式多层住宅的楼梯间，水泥台阶磨得发亮，墙上贴着褪色的小广告，一盏昏黄的声控灯刚亮起，扶手是掉了漆的铁管，楼道口堆着纸箱和自行车。"},
+    {"name": "夜班医院走廊长椅", "kind": "scene", "prompt": "医院门诊楼深夜的走廊，冷白色的灯管只亮了一半，一排蓝色塑料长椅，尽头是亮着灯的护士站，地面反着光，一个人抱着外套坐在长椅尽头。"},
+    {"name": "清晨菜市场摊位与塑料棚", "kind": "scene", "prompt": "清晨的社区菜市场，塑料棚下摆着一排菜摊，青菜上还有水珠，摊主正在码菜，头顶挂着一排暖黄灯泡，地上是湿的，远处有自行车和编织筐。"},
+    {"name": "小区物业办公室里的业主与收费单", "kind": "scene", "prompt": "小区物业办公室内部，一张旧办公桌，墙上贴着缴费通知和小区平面图，桌上摊着物业费单据和计算器，一位住户站在桌前拿着手机，窗外是小区的绿化带。"},
+    {"name": "网吧夜班连排机位", "kind": "scene", "prompt": "深夜的网吧内部，一排机位亮着蓝紫色的屏幕光，几台机子空着，座椅皮面开裂，桌上放着泡面桶和饮料瓶，远处吧台有一盏小灯，空气里有点闷。"}
+  ]
+}

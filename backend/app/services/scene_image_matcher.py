@@ -63,11 +63,16 @@ class SceneImageMatcher:
 
     # ── 文件指纹 ──────────────────────────────────────────
 
+    def _image_files(self):
+        """场景图文件列表：png 与 webp 都支持（webp 体积只有 png 的十分之一）"""
+        files = list(self._image_dir.glob("*.png")) + list(self._image_dir.glob("*.webp"))
+        return sorted(files, key=lambda p: p.name)
+
     def _compute_hash(self) -> str:
         """用文件名+大小的排序列表生成指纹，检测图片增删改"""
         info = sorted(
             (p.name, p.stat().st_size)
-            for p in self._image_dir.glob("*.png")
+            for p in self._image_files()
         )
         raw = json.dumps(info, sort_keys=True)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
@@ -90,7 +95,7 @@ class SceneImageMatcher:
             logger.info("CACHE: 文件指纹已变化，需要重新计算")
             return False
 
-        png_files = sorted(self._image_dir.glob("*.png"))
+        png_files = self._image_files()
         if len(png_files) != len(data.get("embeddings", [])):
             logger.info("CACHE: 图片数量变化")
             return False
@@ -228,7 +233,7 @@ class SceneImageMatcher:
             return
 
         # 计算 embedding
-        png_files = sorted(self._image_dir.glob("*.png"))
+        png_files = self._image_files()
         if not png_files:
             logger.warning("WARMUP: %s 中没有 .png 图片", self._image_dir)
             return
