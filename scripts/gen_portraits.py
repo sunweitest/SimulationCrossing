@@ -57,11 +57,11 @@ NEG = (
 
 
 WORLD_ART = {
-    "三国演义": "史诗电影级 CG 厚涂，汉代札甲与青铜兽纹，营帐旗帜与风沙，暖金侧逆光，厚重笔触与真实金属高光",
-    "水浒传": "国风厚涂电影感，粗布短打与麻绳皮甲，山野水汽与雾，冷绿土黄对比，笔触明显",
+    "三国演义": "史诗电影级 CG 厚涂，汉代军营与青铜纹样，营帐旗帜与风沙，暖金侧逆光，厚重笔触与真实金属高光",
+    "水浒传": "国风厚涂电影感，山寨木栅与山野水汽薄雾，冷绿土黄对比，笔触明显",
     "红楼梦": "工笔重彩融合油画质感，织锦缎面、点翠珠翠与绒花，烛火与窗棂斑驳光影，柔润细腻",
     "金瓶梅": "明代市井写实油画，绸缎光泽、烛影摇晃、木构宅院，暖褐与朱红，厚重颜料肌理",
-    "明代": "明代宫廷人物画风，织金补服与乌纱，深色背景，戏剧性侧光，金线细节清晰",
+    "明代": "明代宫廷人物画风，朱漆宫墙与深色背景，戏剧性侧光，金线与织物细节清晰",
     "清代": "清宫暗红与石青配色，金线刺绣与点翠，阴郁高级感，磨砂颗粒质感与浅景深",
     "西游记": "神话 CG，云气与金箔、妖异色光，宏大氛围，体积光穿透云层",
     "封神演义": "上古神话厚涂，青铜纹样与玄色旗帜，雷火与烽烟，史诗光影与强烈明暗",
@@ -80,18 +80,19 @@ WORLD_ART = {
 ANCIENT_ATTIRE = [
     (
         r"皇帝|天子|陛下|帝王|圣上",
-        "身穿明黄织金龙袍，龙纹与十二章纹清晰可辨，头戴冕冠或翼善冠，腰束玉带，衣料有厚重织金的立体光泽",
+        "身穿明黄织金龙袍，五爪龙纹与十二章纹清晰可辨，头戴冕冠或翼善冠，腰束玉带，胸前朝珠，衣料有厚重织金与刺绣的立体光泽",
     ),
     (
         r"太后|皇后|娘娘|贵妃|妃|贵人|公主|格格",
-        "身着织金宫装与立领长袍，头戴点翠凤冠或钿子，耳坠与护甲（指甲套）精巧，衣料是缎面暗纹，光下有细密金线",
+        "身着明黄或石青的朝袍/氅衣，袖口与襟边满绣金线龙纹与海水江崖，头戴点翠凤冠或钿子、东珠流苏，颈挂朝珠，"
+        "双手入画戴着金护甲（指甲套），衣料是厚重缎面提花，光下有细密金线反光",
     ),
     (
-        r"将军|都督|头领|统领|提辖|校尉|都统|大将|元帅|先锋|女将|飞将|马军|步军|武师|刀客|剑客|镖头|捕快|教头|头目|寨主|当家",
+        r"将军|都督|头领|统领|提辖|校尉|都统|大将|元帅|先锋|女将|飞将|马军|步军|武师|刀客|剑客|镖头|捕快|教头|头目|寨主",
         "身披实战甲胄：札甲或鳞甲片片相接，肩头兽纹吞口，胸护心镜，腰束革带，外罩战袍，腕上护臂，甲片边缘有磨损与冷光",
     ),
     (
-        r"丞相|尚书|侍郎|御史|知府|知县|县令|太守|中书|大学士|判官|主簿|幕僚|参军|刺史|督抚|钦差|太监|宦官|内侍",
+        r"丞相|尚书|侍郎|御史|知府|知县|县令|太守|中书|大学士|判官|主簿|幕僚|参军|刺史|督抚|钦差|太监|宦官|内侍|军师",
         "身穿圆领官袍，胸前补子绣禽兽纹样，腰束玉带，头戴乌纱幞头或官帽，袖口与领缘有织金滚边",
     ),
     (
@@ -187,6 +188,21 @@ def infer_props(world: str, ch: dict) -> str:
     return ""
 
 
+def negative_for(world: str, ch: dict) -> str:
+    base = NEG_MODERN if world in MODERN_WORLDS else NEG
+    if world in MODERN_WORLDS:
+        return base
+    rank_bg = f"{ch.get('rank') or ''} {ch.get('background') or ''}"[:80]
+    military = bool(re.search(
+        r"将军|都督|头领|统领|提辖|校尉|都统|大将|元帅|先锋|女将|飞将|马军|步军|武师|刀客|剑客|镖头|捕快|教头|寨主", rank_bg))
+    royal = bool(re.search(r"皇帝|天子|陛下|帝王|圣上|太后|皇后|娘娘|贵妃|妃|贵人|公主|格格", ch.get("rank") or ""))
+    if not military:
+        base += ", armor, plate armor, pauldron, helmet, chainmail, shoulder guard"
+    if royal:
+        base += ", plain dark robe, black robe, simple cloth"
+    return base
+
+
 def build_prompt(world: str, ch: dict) -> str:
     art = WORLD_ART.get(world, "东方古典氛围，电影级 CG 厚涂，真实光影，笔触可见")
     attire = infer_attire(world, ch)
@@ -201,13 +217,14 @@ def build_prompt(world: str, ch: dict) -> str:
     age = int(ch.get("age") or 20)
     age_txt = f"{age}岁" if age >= 18 else "二十岁上下的青年"
 
+    royal = bool(re.search(r"皇帝|天子|陛下|帝王|圣上|太后|皇后|娘娘|贵妃|妃|贵人|公主|格格", ch.get("rank") or ""))
     parts = [
         f"风格：{art}。",
         f"服饰：{attire}。",
         (f"道具：{prop}。" if prop else ""),
         f"人物：半身肖像，{ch.get('name')}，{ch.get('gender') or ''}，{age_txt}，身份是{ch.get('rank') or '普通人'}；{mood}。",
         (f"线索：{bg[:60]}。" if bg else ""),
-        "构图到腰部，能看清服饰的纹样、材质与配饰；侧前方一束光打在脸上，形成明暗对比，",
+        "构图到腰部，能看清服饰的纹样、材质与配饰；" + ("双手入画，手指与袖口细节清晰；" if royal else "") + "侧前方一束光打在脸上，形成明暗对比，",
         "背景虚化但保留环境信息，浅景深，35mm，真实光影与细腻质感，画面高级不廉价。",
         "不要出现任何文字、水印、logo、边框。",
     ]
@@ -262,7 +279,7 @@ def gen_one(key: str, world: str, ch: dict, force: bool) -> tuple[str, str, floa
     for attempt in range(3):
         t0 = time.time()
         try:
-            blob = request_image(key, prompt, SIZE, NEG_MODERN if world in MODERN_WORLDS else NEG)
+            blob = request_image(key, prompt, SIZE, negative_for(world, ch))
             tmp = dst.with_suffix(".part")
             tmp.write_bytes(blob)
             tmp.replace(dst)
