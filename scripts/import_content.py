@@ -150,8 +150,11 @@ async def import_world(path: Path, dry_run: bool = False, prune: bool = False) -
             stats["novel"] = "created"
         else:
             novel.description = data.get("description", novel.description)
-            if data.get("sort_order") is not None:
-                novel.sort_order = data["sort_order"]
+            # 排序是运营在后台手工调的，导入不要覆盖它——
+            # 否则每次重新部署跑一次 import，世界顺序就被 JSON 里的旧值打回去
+            # （用户手工排好的顺序就这样丢过一次）。新世界用 JSON 的 sort_order 建就行。
+            if data.get("description"):
+                novel.description = data["description"]
             stats["novel"] = "updated"
 
         # 时间线
