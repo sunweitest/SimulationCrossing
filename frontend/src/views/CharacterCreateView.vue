@@ -4,7 +4,7 @@
     <div
       class="create-bg"
       :class="{ 'bg-thumb': step === 'world' }"
-      :style="{ backgroundImage: `url(${displayWorldImage.src})` }"
+      :style="{ backgroundImage: displayWorldImage.css }"
     ></div>
 
     <!-- 登录/注册弹窗 -->
@@ -314,22 +314,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { gameAPI, communityAPI, customCharacterAPI } from '@/api'
+import { WORLD_ART, heroOf, thumbOf, captionOf, bgLayers } from '@/utils/worldArt'
 import AuthModal from '@/components/AuthModal.vue'
-import sanguoImage from '../../../images/sanguo.png'
-import shuihuImage from '../../../images/shuihu.png'
-import mingdaiImage from '../../../images/mingdai.png'
-import hongloumengImage from '../../../images/hongloumeng.png'
-import qingdaiImage from '../../../images/qingdai.png'
-import xiyouImage from '../../../images/xiyou.png'
-import jinpingmeiImage from '../../../images/jinpingmei.png'
-import wastelandImage from '../../../images/wasteland.png'
-import fengshenImage from '../../../images/fengshen.png'
-import wuxiaImage from '../../../images/wuxia.png'
-import xianxiaImage from '../../../images/xianxia.png'
-import datangImage from '../../../images/datang.png'
-import bianjingImage from '../../../images/bianjing.png'
-import urbanImage from '../../../images/urban.png'
-import dailyImage from '../../../images/daily.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -391,83 +377,12 @@ const FALLBACK_NOVELS = {
 // 从API加载的角色详情缓存
 const presetCharacterCache = ref({})
 
-const worldImageMap = {
-  '三国演义': {
-    src: sanguoImage,
-    thumb: '/images/covers/sanguo.webp',
-    caption: '赤壁风起，天下三分'
-  },
-  '水浒传': {
-    src: shuihuImage,
-    thumb: '/images/covers/shuihu.webp',
-    caption: '梁山泊上，聚义听潮'
-  },
-  '明代': {
-    src: mingdaiImage,
-    thumb: '/images/covers/mingdai.webp',
-    caption: '宫阙深处，风云暗涌'
-  },
-  '清代': {
-    src: qingdaiImage,
-    thumb: '/images/covers/qingdai.webp',
-    caption: '盛世帘影，旧梦将醒'
-  },
-  '西游记': {
-    src: xiyouImage,
-    thumb: '/images/covers/xiyou.webp',
-    caption: '西行路上，妖雾重重'
-  },
-  '金瓶梅': {
-    src: jinpingmeiImage,
-    thumb: '/images/covers/jinpingmei.webp',
-    caption: '清河县里，浮世众生'
-  },
-  '废土末世': {
-    src: wastelandImage,
-    thumb: '/images/covers/wasteland.webp',
-    caption: '废土荒原，文明余烬'
-  },
-  '红楼梦': {
-    src: hongloumengImage,
-    thumb: '/images/covers/hongloumeng.webp',
-    caption: '大观园里，一梦浮生'
-  },
-  '封神演义': {
-    src: fengshenImage,
-    thumb: '/images/covers/fengshen.webp',
-    caption: '三界押注，商亡周兴'
-  },
-  '武侠江湖': {
-    src: wuxiaImage,
-    thumb: '/images/covers/wuxia.webp',
-    caption: '一柄刀，一个理由'
-  },
-  '仙侠修真': {
-    src: xianxiaImage,
-    thumb: '/images/covers/xianxia.webp',
-    caption: '从杂役到雷劫之下'
-  },
-  '大唐长安·天宝末年': {
-    src: datangImage,
-    thumb: '/images/covers/datang.webp',
-    caption: '开元全盛日，一夜转衰'
-  },
-  '北宋汴京之变': {
-    src: bianjingImage,
-    thumb: '/images/covers/bianjing.webp',
-    caption: '汴河千帆，终成旧梦'
-  },
-  '都市修真': {
-    src: urbanImage,
-    thumb: '/images/covers/urban.webp',
-    caption: '写字楼里，灵气初醒'
-  },
-  '日常生活': {
-    src: dailyImage,
-    thumb: '/images/covers/daily.webp',
-    caption: '周一早高峰，日子照旧'
-  }
-}
+const worldImageMap = Object.fromEntries(
+  Object.keys(WORLD_ART).map((novel) => [
+    novel,
+    { src: heroOf(novel), thumb: thumbOf(novel), caption: captionOf(novel) }
+  ])
+)
 
 const timelines = computed(() => {
   const n = novelsData.value.find(n => n.novel_name === form.value.novel)
@@ -497,9 +412,10 @@ const currentWorldImage = computed(() => worldImageMap[form.value.novel] || worl
 const displayWorldImage = computed(() => {
   if (step.value === 'world') {
     const meta = worldImageMap[hoverNovel.value] || currentWorldImage.value
-    return { src: meta.thumb }
+    return { src: meta.thumb, css: `url("${meta.thumb}")` }
   }
-  return currentWorldImage.value
+  const meta = currentWorldImage.value
+  return { src: meta.src, css: bgLayers(form.value.novel) }
 })
 
 // 世界卡片数据（优先用接口返回的小说列表，接口挂了用硬编码兜底）

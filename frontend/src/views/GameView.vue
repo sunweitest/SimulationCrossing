@@ -3,7 +3,7 @@
     <!-- ===== 全屏背景层 ===== -->
     <div
       class="game-bg"
-      :style="{ backgroundImage: `url(${bgImageSrc})` }"
+      :style="{ backgroundImage: bgImageStyle }"
     ></div>
 
     <!-- ===== 顶部信息栏 ===== -->
@@ -302,13 +302,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { gameAPI } from '@/api'
-import sanguoImage from '../../../images/sanguo.png'
-import shuihuImage from '../../../images/shuihu.png'
-import mingdaiImage from '../../../images/mingdai.png'
-import hongloumengImage from '../../../images/hongloumeng.png'
-import xiyouImage from '../../../images/xiyou.png'
-import jinpingmeiImage from '../../../images/jinpingmei.png'
-import wastelandImage from '../../../images/wasteland.png'
+import { WORLD_ART, heroOf, thumbOf, captionOf, bgLayers } from '@/utils/worldArt'
 
 const router = useRouter()
 const route = useRoute()
@@ -492,21 +486,20 @@ const mission = computed(() => {
   return currentScene.value?.mission || deriveMission(ms)
 })
 
-const worldImageMap = {
-  '三国演义': { src: sanguoImage },
-  '水浒传': { src: shuihuImage },
-  '明代': { src: mingdaiImage },
-  '清代': { src: hongloumengImage },
-  '西游记': { src: xiyouImage },
-  '金瓶梅': { src: jinpingmeiImage },
-  '废土末世': { src: wastelandImage }
-}
+const worldImageMap = Object.fromEntries(
+  Object.keys(WORLD_ART).map((novel) => [
+    novel,
+    { src: heroOf(novel), thumb: thumbOf(novel), caption: captionOf(novel) }
+  ])
+)
 const currentWorldImage = computed(() => worldImageMap[gameStore.currentSession?.novel])
 
 // 背景图：优先用场景匹配图，无匹配时用世界图
-const bgImageSrc = computed(() => {
-  if (currentSceneImage.value) return currentSceneImage.value
-  if (currentWorldImage.value?.src) return currentWorldImage.value.src
+const bgImageStyle = computed(() => {
+  // 有匹配的场景图就用场景图；否则用世界 hero，hero 缺失时退回缩略图
+  if (currentSceneImage.value) return `url("${currentSceneImage.value}")`
+  const novel = gameStore.currentSession?.novel
+  if (novel) return bgLayers(novel)
   return ''
 })
 
