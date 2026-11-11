@@ -46,6 +46,16 @@ async def lifespan(app: FastAPI):
             )
             logger = logging.getLogger("main")
             logger.info("场景图片匹配器初始化完成: %s", image_dir)
+
+            from app.services.sfx_matcher import init_sfx_matcher
+
+            await init_sfx_matcher(
+                audio_dir=project_root / settings.SFX_DIR,
+                cache_path=project_root / settings.SFX_CACHE_PATH,
+                manifest_path=project_root / settings.SFX_MANIFEST,
+                api_key=settings.DASHSCOPE_API_KEY,
+            )
+            logger.info("音效匹配器初始化完成: %s", settings.SFX_DIR)
         except Exception as e:
             logger = logging.getLogger("main")
             logger.warning("场景图片匹配器初始化失败（非致命）: %s", e)

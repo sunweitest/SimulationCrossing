@@ -21,6 +21,7 @@ from app.schemas.schemas import (
 from sqlalchemy.orm import selectinload
 from app.services.game_service import GameService, get_provider
 from app.services.scene_image_matcher import get_matcher
+from app.services.sfx_matcher import get_sfx_matcher
 from typing import Optional
 
 logger = logging.getLogger("game_api")
@@ -457,6 +458,15 @@ async def perform_action(
                 new_scene["scene_image"] = None
         else:
             new_scene["scene_image"] = None
+        sfx = get_sfx_matcher()
+        if sfx and sfx.is_ready:
+            try:
+                new_scene["scene_sfx"] = await sfx.find_best_match(
+                    new_scene["scene_description"], novel=game_session.novel, action=action_data.action
+                )
+            except Exception as e:
+                logger.warning("ACTION: 音效匹配失败（非致命）: %s", e)
+                new_scene["scene_sfx"] = None
     else:
         new_scene["scene_image"] = None
 
@@ -688,27 +698,32 @@ async def perform_action_stream(
             if matcher and matcher.is_ready
             else None
         )
-
-        if image_coro and mission_coro:
-            metadata, scene_image, mission_update = await asyncio.gather(
-                metadata_coro, image_coro, mission_coro
+        sfx = get_sfx_matcher()
+        sfx_coro = (
+            sfx.find_best_match(
+                scene_description, novel=game_session_local.novel, action=action_data.action
             )
-        elif image_coro:
-            metadata, scene_image = await asyncio.gather(metadata_coro, image_coro)
-            mission_update = None
-        elif mission_coro:
-            metadata, mission_update = await asyncio.gather(metadata_coro, mission_coro)
-            scene_image = None
-        else:
-            metadata = await metadata_coro
-            scene_image = None
-            mission_update = None
+            if sfx and sfx.is_ready
+            else None
+        )
+
+        # 四件事并行：元数据（选项/积分）、配图、音效、使命判定
+        meta_task = asyncio.create_task(metadata_coro)
+        image_task = asyncio.create_task(image_coro) if image_coro else None
+        sfx_task = asyncio.create_task(sfx_coro) if sfx_coro else None
+        mission_task = asyncio.create_task(mission_coro) if mission_coro else None
+
+        metadata = await meta_task
+        scene_image = await image_task if image_task else None
+        scene_sfx = await sfx_task if sfx_task else None
+        mission_update = await mission_task if mission_task else None
 
         new_scene = {
             "scene_description": scene_description,
             "choices": metadata["choices"],
             "game_update": metadata["game_update"],
             "scene_image": scene_image,
+            "scene_sfx": scene_sfx,
         }
         mission_res = GameService.apply_mission_update(
             game_session_local, mission_update or metadata.get("mission_update")

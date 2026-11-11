@@ -28,6 +28,9 @@
         </span>
         <span class="top-stat">⭐ {{ gameStore.currentSession?.points || 0 }}</span>
         <span class="top-stat">🏅 {{ gameStore.currentSession?.achievements?.length || 0 }}</span>
+        <button class="top-menu-btn" @click="toggleSound" :title="soundOn ? '关闭音效' : '开启音效'">
+          {{ soundOn ? '🔊' : '🔇' }}
+        </button>
         <button class="top-menu-btn" @click="openTurns" title="回到之前的回合">⏪</button>
         <button class="top-menu-btn" @click="showSidebar = !showSidebar" title="菜单">
           ☰
@@ -437,6 +440,42 @@ const displayedScene = ref('')
 const achievementToast = ref(null)
 const isAwaitingOptions = ref(false)
 const currentSceneImage = ref(null)
+const soundOn = ref(localStorage.getItem('sfx_enabled') !== '0')
+let lastSfxAt = 0
+let lastSfxName = ''
+let lastSfxKey = ''
+let currentSfxAudio = null
+
+const toggleSound = () => {
+  soundOn.value = !soundOn.value
+  localStorage.setItem('sfx_enabled', soundOn.value ? '1' : '0')
+  if (!soundOn.value && currentSfxAudio) {
+    currentSfxAudio.pause()
+    currentSfxAudio = null
+  }
+}
+
+// 一回合最多一个短音效；同名 6 秒内不重复，避免连着两回合都在「拔刀」
+const playSfx = (sfx, sceneKey = '') => {
+  if (!soundOn.value || !sfx?.url) return
+  // 同一段剧情（流式结束会和最终结果各触发一次）只响一次
+  if (sceneKey && sceneKey === lastSfxKey) return
+  if (sceneKey) lastSfxKey = sceneKey
+  const now = Date.now()
+  if (now - lastSfxAt < 1200) return
+  if (sfx.name === lastSfxName && now - lastSfxAt < 6000) return
+  lastSfxAt = now
+  lastSfxName = sfx.name
+  try {
+    if (currentSfxAudio) currentSfxAudio.pause()
+    const audio = new Audio(sfx.url)
+    audio.volume = 0.5
+    currentSfxAudio = audio
+    audio.play().catch(() => { /* 浏览器不给放就静默 */ })
+  } catch {
+    /* 播放失败不影响剧情 */
+  }
+}
 const streamStatus = ref('AI正在生成剧情...')
 const showSidebar = ref(false)
 
@@ -689,6 +728,10 @@ const performAction = async (action) => {
           displayedScene.value = scenePayload.scene_description
         }
         currentSceneImage.value = scenePayload.scene_image || null
+        playSfx(
+          scenePayload.scene_sfx,
+          scenePayload.turn_index ?? (scenePayload.scene_description || '').slice(0, 40)
+        )
         for (const ach of scenePayload.mission_achievements || []) {
           const list = gameStore.currentSession.achievements || []
           if (!list.includes(ach)) gameStore.currentSession.achievements = [...list, ach]

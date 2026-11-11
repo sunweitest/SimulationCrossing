@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # 场景图片匹配
     SCENE_IMAGE_DIR: str = "frontend/public/images/scene"  # 图片目录，相对项目根目录
     SCENE_IMAGE_CACHE_PATH: str = "backend/cache/scene_embeddings.json"  # 向量缓存文件
+    SFX_DIR: str = "frontend/public/audio/sfx"  # 音效公共库
+    SFX_MANIFEST: str = "content/sfx.json"  # 音效描述与标签
+    SFX_CACHE_PATH: str = "backend/cache/sfx_embeddings.json"  # 音效向量缓存
 
     # 管理后台
     ADMIN_KEY: str = "admin-secret-change-me"
