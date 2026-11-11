@@ -175,6 +175,39 @@ class WorldClickEvent(Base):
     created_at = Column(DateTime, nullable=False, default=now_cn, index=True)
 
 
+class WorldSuggestion(Base):
+    """用户提的「想穿越的世界」：提交需登录，点赞不要求"""
+    __tablename__ = "world_suggestions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(String(40), nullable=False)          # 世界名
+    summary = Column(String(300), nullable=False)       # 背景 + 人物，一两句话
+    status = Column(String(16), nullable=False, default="open")  # open / adopted / rejected
+    created_at = Column(DateTime, nullable=False, default=now_cn, index=True)
+
+    __table_args__ = (
+        Index("ix_world_suggestions_status_created", "status", "created_at"),
+    )
+
+
+class WorldSuggestionVote(Base):
+    """对用户提的世界的点赞：同一 voter_key 对同一条只算一票"""
+    __tablename__ = "world_suggestion_votes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    suggestion_id = Column(
+        Integer, ForeignKey("world_suggestions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    voter_key = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=now_cn)
+
+    __table_args__ = (
+        UniqueConstraint("voter_key", "suggestion_id", name="uq_world_suggestion_votes_key"),
+    )
+
+
 class WorldVote(Base):
     """「想看哪个世界」投票：同一 voter_key 对同一世界只算一票"""
     __tablename__ = "world_votes"

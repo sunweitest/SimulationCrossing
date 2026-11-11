@@ -71,6 +71,9 @@ export const communityAPI = {
   trackWorldClick: (novel) => api.post('/community/world-click', { novel }),
   getWorldVotes: () => api.get('/community/world-votes'),
   voteWorld: (worldName) => api.post('/community/world-vote', { world_name: worldName }),
+  getSuggestions: (params) => api.get('/community/suggestions', { params }),
+  createSuggestion: (data) => api.post('/community/suggestions', data),
+  voteSuggestion: (id) => api.post(`/community/suggestions/${id}/vote`),
   getLadder: (params) => api.get('/community/ladder', { params }),
 }
 

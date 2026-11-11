@@ -81,6 +81,58 @@
               <span class="vote-hint">{{ c.hint }}</span>
             </button>
           </div>
+
+          <!-- 自己写一个：登录才能提交，点赞不限 -->
+          <div class="suggest-box">
+            <div class="suggest-title">
+              <strong>没看到想去的？自己写一个</strong>
+              <span v-if="authStore.isAuthenticated">世界名 + 一两句背景与人物</span>
+              <span v-else>提交需要登录，点赞不用</span>
+            </div>
+
+            <div v-if="authStore.isAuthenticated" class="suggest-form">
+              <input
+                v-model="newSuggestion.title"
+                maxlength="24"
+                placeholder="世界名，例如「明朝锦衣卫」"
+                @keyup.enter="submitSuggestion"
+              >
+              <textarea
+                v-model="newSuggestion.summary"
+                maxlength="300"
+                rows="2"
+                placeholder="什么时代、在哪、有哪些人，你想演谁。例如：永乐年间的北镇抚司，有指挥使、诏狱狱卒和告密的书生，我想当那个刚入职的校尉"
+              ></textarea>
+              <div class="suggest-actions">
+                <span class="suggest-count">{{ newSuggestion.summary.length }}/300</span>
+                <button
+                  class="suggest-submit"
+                  :disabled="suggestSubmitting || !canSubmitSuggestion"
+                  @click="submitSuggestion"
+                >{{ suggestSubmitting ? '提交中…' : '提交' }}</button>
+              </div>
+            </div>
+
+            <p v-if="suggestMsg" class="suggest-msg" :class="{ warn: suggestMsgWarn }">{{ suggestMsg }}</p>
+
+            <ul v-if="suggestions.length" class="suggest-list">
+              <li v-for="item in suggestions" :key="item.id">
+                <div class="suggest-main">
+                  <div class="suggest-line">
+                    <strong>{{ item.title }}</strong>
+                    <span class="suggest-author">{{ item.author }}<template v-if="item.is_mine">（我）</template></span>
+                  </div>
+                  <p class="suggest-summary">{{ item.summary }}</p>
+                </div>
+                <button
+                  class="suggest-vote"
+                  :class="{ voted: item.voted }"
+                  @click="toggleSuggestionVote(item)"
+                >👍 {{ item.votes }}</button>
+              </li>
+            </ul>
+            <p v-else-if="suggestLoaded" class="suggest-empty">还没有人提，你来写第一个。</p>
+          </div>
         </div>
       </div>
 
@@ -336,6 +388,15 @@ const charLoading = ref(false)
 const selectedChar = ref(null)    // 选中的角色对象；自定义时为 { custom: true }
 const voteCandidates = ref([])
 const voteTotal = ref(0)
+const suggestions = ref([])
+const suggestLoaded = ref(false)
+const suggestSubmitting = ref(false)
+const suggestMsg = ref('')
+const suggestMsgWarn = ref(false)
+const newSuggestion = ref({ title: '', summary: '' })
+const canSubmitSuggestion = computed(
+  () => newSuggestion.value.title.trim().length >= 2 && newSuggestion.value.summary.trim().length >= 10
+)
 const availableCharacters = ref({}) // 从API获取的角色-时间节点映射
 const standardRanks = ['皇帝','皇后','太子','皇子','公主','王爷','王妃','贵妃','将军','军师','士兵','文官','小吏','太监','侠客','读书人','商人','大小姐','平民','宫女','道士','僧人','郎中','未知']
 const myCharacters = ref([])        // 当前世界里我自己的自定义角色
@@ -586,6 +647,62 @@ const toggleVote = async (c) => {
   }
 }
 
+const loadSuggestions = async () => {
+  try {
+    const data = await communityAPI.getSuggestions({ sort: 'hot', limit: 12 })
+    suggestions.value = data.items || []
+  } catch (err) {
+    console.warn('想穿越的世界列表加载失败:', err)
+  } finally {
+    suggestLoaded.value = true
+  }
+}
+
+const flashSuggest = (text, warn = false) => {
+  suggestMsg.value = text
+  suggestMsgWarn.value = warn
+  setTimeout(() => { suggestMsg.value = '' }, 4000)
+}
+
+const submitSuggestion = async () => {
+  if (!canSubmitSuggestion.value || suggestSubmitting.value) return
+  suggestSubmitting.value = true
+  try {
+    await communityAPI.createSuggestion({
+      title: newSuggestion.value.title.trim(),
+      summary: newSuggestion.value.summary.trim(),
+    })
+    newSuggestion.value = { title: '', summary: '' }
+    flashSuggest('已提交，等作者看到票数')
+    await loadSuggestions()
+  } catch (err) {
+    const detail = err?.response?.data?.detail
+    const msg = typeof detail === 'string' ? detail : detail?.message || '提交失败，请稍后再试'
+    flashSuggest(msg, true)
+    if (err?.response?.status === 401) {
+      showAuthModal.value = true
+      authModalTab.value = 'login'
+    }
+  } finally {
+    suggestSubmitting.value = false
+  }
+}
+
+const toggleSuggestionVote = async (item) => {
+  const before = item.voted
+  item.voted = !before
+  item.votes += before ? -1 : 1
+  try {
+    const res = await communityAPI.voteSuggestion(item.id)
+    item.voted = res.voted
+    item.votes = res.votes
+  } catch (err) {
+    item.voted = before
+    item.votes += before ? 1 : -1
+    flashSuggest('点赞失败，请稍后再试', true)
+  }
+}
+
 const backToCharacters = () => {
   selectedChar.value = null
   error.value = ''
@@ -633,6 +750,7 @@ onMounted(async () => {
   }
 
   loadVotes()
+  loadSuggestions()
 
   // 选世界阶段暂不预加载角色，进入角色页时再拉
   if (step.value === 'character') {
@@ -1662,4 +1780,164 @@ textarea.input {
 
 .vote-chip:hover .vote-hint { max-width: 12rem; opacity: 1; }
 
+
+/* ── 自己写一个想穿越的世界 ── */
+.suggest-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed rgba(212, 175, 55, 0.35);
+}
+
+.suggest-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.86rem;
+  color: #8a8578;
+}
+
+.suggest-title strong {
+  font-size: 0.95rem;
+  color: #2f2a22;
+}
+
+.suggest-form {
+  display: grid;
+  gap: 8px;
+}
+
+.suggest-form input,
+.suggest-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 10px;
+  background: #fffdf7;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #2f2a22;
+  resize: vertical;
+}
+
+.suggest-form textarea {
+  line-height: 1.6;
+  min-height: 62px;
+}
+
+.suggest-form input:focus,
+.suggest-form textarea:focus {
+  outline: none;
+  border-color: #c9a227;
+}
+
+.suggest-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.suggest-count {
+  font-size: 0.75rem;
+  color: #a29a89;
+}
+
+.suggest-submit {
+  padding: 8px 22px;
+  border: none;
+  border-radius: 999px;
+  background: #8a6d2f;
+  color: #fff;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.suggest-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.suggest-msg {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: #4f7a3f;
+}
+
+.suggest-msg.warn {
+  color: #b4553c;
+}
+
+.suggest-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.suggest-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 10px;
+  background: #fffef9;
+}
+
+.suggest-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.suggest-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.suggest-line strong {
+  font-size: 0.94rem;
+  color: #2f2a22;
+}
+
+.suggest-author {
+  font-size: 0.74rem;
+  color: #a29a89;
+}
+
+.suggest-summary {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: #5c5548;
+}
+
+.suggest-vote {
+  flex-shrink: 0;
+  min-width: 56px;
+  padding: 6px 10px;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  border-radius: 999px;
+  background: transparent;
+  color: #8a6d2f;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.suggest-vote.voted {
+  background: #c9a227;
+  border-color: #c9a227;
+  color: #2b2417;
+}
+
+.suggest-empty {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: #a29a89;
+}
 </style>

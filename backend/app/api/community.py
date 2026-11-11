@@ -19,6 +19,8 @@ from app.models.models import (
     PresetCharacter,
     TimelineConfig,
     WorldClickEvent,
+    WorldSuggestion,
+    WorldSuggestionVote,
     WorldVote,
 )
 from app.core.timeutil import now_cn
@@ -242,6 +244,201 @@ async def vote_world(
     db.add(WorldVote(world_name=name, user_id=getattr(user, "id", None), voter_key=key))
     await db.commit()
     return {"ok": True, "voted": True}
+
+
+# --------------------------------------------------------------- 想穿越的世界（用户提交）
+SUGGESTION_MAX_PER_DAY = 3
+SUGGESTION_MAX_OPEN = 5
+
+
+class SuggestionIn(BaseModel):
+    """世界名 + 背景与人物的一两句话"""
+
+    title: str = Field(..., min_length=2, max_length=24, description="世界名，例如「明朝锦衣卫」")
+    summary: str = Field(
+        ..., min_length=10, max_length=300, description="时代/地点、有哪些人、想演什么"
+    )
+
+
+def _author_name(nickname: Optional[str], user_id: Optional[int]) -> str:
+    if nickname:
+        return nickname
+    if user_id:
+        return f"闯关者{user_id:04d}"
+    return "匿名"
+
+
+@router.get("/suggestions", summary="用户提的世界与票数")
+async def list_suggestions(
+    request: Request,
+    sort: str = "hot",
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    用户提交的「想穿越的世界」，按票数或时间排序。
+
+    - **权限**：公开
+    - **参数**：`sort=hot|new`，`limit`（1-50）
+    """
+    limit = max(1, min(limit, 50))
+    vote_count = func.count(WorldSuggestionVote.id).label("votes")
+    stmt = (
+        select(WorldSuggestion, vote_count, User.nickname)
+        .outerjoin(WorldSuggestionVote, WorldSuggestionVote.suggestion_id == WorldSuggestion.id)
+        .outerjoin(User, User.id == WorldSuggestion.user_id)
+        .where(WorldSuggestion.status != "rejected")
+        .group_by(WorldSuggestion.id, User.nickname)
+    )
+    if sort == "new":
+        stmt = stmt.order_by(desc(WorldSuggestion.created_at))
+    else:
+        stmt = stmt.order_by(desc("votes"), desc(WorldSuggestion.created_at))
+    rows = (await db.execute(stmt.limit(limit))).all()
+
+    key = _voter_key(request, user)
+    mine = {
+        v.suggestion_id
+        for v in (
+            await db.execute(
+                select(WorldSuggestionVote).where(WorldSuggestionVote.voter_key == key)
+            )
+        ).scalars().all()
+    }
+
+    items = [
+        {
+            "id": s.id,
+            "title": s.title,
+            "summary": s.summary,
+            "votes": int(votes or 0),
+            "voted": s.id in mine,
+            "status": s.status,
+            "author": _author_name(nickname, s.user_id),
+            "is_mine": bool(user and s.user_id == getattr(user, "id", None)),
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        }
+        for s, votes, nickname in rows
+    ]
+    return {"items": items, "total": len(items), "can_submit": user is not None}
+
+
+@router.post("/suggestions", status_code=201, summary="提交一个想穿越的世界")
+async def create_suggestion(
+    payload: SuggestionIn,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    提交一个世界（必须登录）。
+
+    - **权限**：登录用户
+    - **错误**：`401` 未登录；`409` 重名（引导去点赞）；`429` 今天提交超过 3 个；
+      `400` 已排队 5 个未处理
+    """
+    if user is None:
+        raise HTTPException(status_code=401, detail="登录后才能提交想穿越的世界")
+
+    title = " ".join(payload.title.split())
+    summary = " ".join(payload.summary.split())
+    if len(title) < 2 or len(summary) < 10:
+        raise HTTPException(status_code=400, detail="世界名至少 2 个字，背景与人物至少 10 个字")
+
+    dup = (
+        await db.execute(
+            select(WorldSuggestion).where(
+                func.lower(WorldSuggestion.title) == title.lower(),
+                WorldSuggestion.status != "rejected",
+            )
+        )
+    ).scalars().first()
+    if dup:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "已经有人提过这个了，去给它点个赞吧", "id": dup.id},
+        )
+
+    day_ago = now_cn() - timedelta(days=1)
+    recent = (
+        await db.execute(
+            select(func.count())
+            .select_from(WorldSuggestion)
+            .where(WorldSuggestion.user_id == user.id, WorldSuggestion.created_at >= day_ago)
+        )
+    ).scalar_one()
+    if recent >= SUGGESTION_MAX_PER_DAY:
+        raise HTTPException(status_code=429, detail=f"今天已经提交 {SUGGESTION_MAX_PER_DAY} 个了，明天再来")
+
+    open_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(WorldSuggestion)
+            .where(WorldSuggestion.user_id == user.id, WorldSuggestion.status == "open")
+        )
+    ).scalar_one()
+    if open_count >= SUGGESTION_MAX_OPEN:
+        raise HTTPException(status_code=400, detail=f"你已经排队了 {SUGGESTION_MAX_OPEN} 个，等作者先处理")
+
+    item = WorldSuggestion(user_id=user.id, title=title, summary=summary)
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return {"id": item.id, "title": item.title, "summary": item.summary, "votes": 0, "voted": False}
+
+
+@router.post("/suggestions/{suggestion_id}/vote", summary="给用户提的世界点赞/取消")
+async def vote_suggestion(
+    suggestion_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """
+    点赞是开关（同一身份对同一条只算一票）；提交必须登录，点赞不要求。
+
+    - **权限**：公开
+    - **错误**：`404` 不存在或已下线
+    """
+    item = (
+        await db.execute(select(WorldSuggestion).where(WorldSuggestion.id == suggestion_id))
+    ).scalar_one_or_none()
+    if item is None or item.status == "rejected":
+        raise HTTPException(status_code=404, detail="这个世界不存在")
+
+    key = _voter_key(request, user)
+    existing = (
+        await db.execute(
+            select(WorldSuggestionVote).where(
+                WorldSuggestionVote.suggestion_id == suggestion_id,
+                WorldSuggestionVote.voter_key == key,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing:
+        await db.delete(existing)
+        await db.commit()
+        voted = False
+    else:
+        db.add(
+            WorldSuggestionVote(
+                suggestion_id=suggestion_id,
+                user_id=getattr(user, "id", None),
+                voter_key=key,
+            )
+        )
+        await db.commit()
+        voted = True
+
+    votes = (
+        await db.execute(
+            select(func.count())
+            .select_from(WorldSuggestionVote)
+            .where(WorldSuggestionVote.suggestion_id == suggestion_id)
+        )
+    ).scalar_one()
+    return {"ok": True, "voted": voted, "votes": int(votes)}
 
 
 # --------------------------------------------------------------- 天梯
