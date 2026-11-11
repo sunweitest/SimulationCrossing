@@ -1,0 +1,13 @@
+{
+  "size": "1664*928",
+  "style": "当代都市商战题材概念设定图，写实电影感，明亮通透。晨光透过落地玻璃，暖白与冷蓝对比，色彩克制不刺眼。35mm 镜头，浅景深，轻微颗粒。构图 16:9，主体位于画面中下部，上方留出天花与窗外城市层次，左右留出可放标题的安静区域。不要出现任何文字、水印、logo、界面 UI。不要卡通或二次元。",
+  "negative": "text, letters, watermark, logo, signature, UI, border, frame, cartoon, anime, cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed hands, extra limbs, duplicate subject, plastic look, ancient clothing, palace, hanfu, dark, underexposed, night scene",
+  "items": [
+    {
+      "name": "都市霸总封面-晨光会议室",
+      "kind": "cover",
+      "cover_target": "bazong",
+      "prompt": "现代高层写字楼的会议室，整面落地玻璃，清晨的阳光斜照进来，在地毯上拉出长条光带。长条会议桌上摊着一份厚厚的合同、一支钢笔和两只咖啡杯，其中一只已经空了。一个穿深色西装的男人背影站在窗前，一手插在裤袋里，看着外面的城市天际线；玻璃上映出他的轮廓和身后空着的椅子。整体明亮，冷暖对比，克制而有压迫感。"
+    }
+  ]
+}

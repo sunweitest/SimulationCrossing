@@ -17,7 +17,8 @@ export const WORLD_ART = {
   '大唐长安·天宝末年': { slug: 'datang', caption: '开元全盛日，一夜转衰' },
   '北宋汴京之变': { slug: 'bianjing', caption: '汴河千帆，终成旧梦' },
   '都市修真': { slug: 'urban', caption: '写字楼里，灵气初醒' },
-  '日常生活': { slug: 'daily', caption: '周一早高峰，日子照旧' }
+  '日常生活': { slug: 'daily', caption: '周一早高峰，日子照旧' },
+  '都市霸总': { slug: 'bazong', caption: '三十亿的价码，和一纸婚约' }
 }
 
 export const FALLBACK_SLUG = 'sanguo'

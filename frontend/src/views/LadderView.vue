@@ -92,7 +92,7 @@ const COVERS = {
   '西游记': 'xiyou', '金瓶梅': 'jinpingmei', '废土末世': 'wasteland',
   '红楼梦': 'hongloumeng', '封神演义': 'fengshen', '武侠江湖': 'wuxia',
   '仙侠修真': 'xianxia', '大唐长安·天宝末年': 'datang', '北宋汴京之变': 'bianjing',
-  '都市修真': 'urban', '日常生活': 'daily'
+  '都市修真': 'urban', '日常生活': 'daily', '都市霸总': 'bazong'
 }
 const coverOf = (novel) => `/images/covers/${COVERS[novel] || 'sanguo'}.webp`
 
