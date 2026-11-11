@@ -54,7 +54,7 @@
       "starting_points": 70,
       "role": "main",
       "background": "清河县破落户子弟，以生药铺起家，勾结官府、攀附权贵，妻妾成群、家财万贯。精明好色、见利忘义，是全书的主角。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/西门庆.webp",
       "timelines": {
         "结拜发迹": {
           "background": "你与九个泼皮结拜为十兄弟，在清河县街头渐渐有了名号。你开了间生药铺，日子正要红火起来。",
@@ -210,7 +210,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "原为武大郎之妻，因王婆撮合与西门庆私通，后毒死亲夫改嫁西门庆为第五房妾。美貌绝伦而心肠狠毒，善妒工于心计。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/潘金莲.webp",
       "timelines": {
         "王婆说风情": {
           "background": "你在王婆茶坊与西门庆眉来眼去，一段孽缘就此开始。",
@@ -318,7 +318,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "花子虚之妻，丈夫死后改嫁西门庆为第六房妾。温柔善良，深爱西门庆，生子官哥后母子二人成了宅内斗争的牺牲品。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/李瓶儿.webp",
       "timelines": {
         "娶李瓶儿": {
           "background": "花子虚死了，你带着家财改嫁西门庆，成了他的第六房妾。",
@@ -402,7 +402,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "潘金莲的贴身丫鬟，后为西门庆通房。性格泼辣刚烈、牙尖嘴利。西门庆死后改嫁周守备，命运大起大落。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/庞春梅.webp",
       "timelines": {
         "毒杀武大": {
           "background": "你是潘金莲的丫鬟，眼看着主子一步步走向深渊，你不敢言语。",
@@ -486,7 +486,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "西门庆的正妻，出身官宦人家，知书达礼、端庄持家。对丈夫的荒唐看在眼里、忍在心里，是全书中少数守得住本分的人。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/吴月娘.webp",
       "timelines": {
         "结拜发迹": {
           "background": "你是西门庆的正妻，操持着偌大的家业，眼看丈夫在外头花天酒地。",
@@ -570,7 +570,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "带着丰厚家财改嫁西门庆的第三房妾。精明世故、明哲保身，在妻妾争斗中从不站队，最终全身而退。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/孟玉楼.webp",
       "timelines": {
         "娶李瓶儿": {
           "background": "你带着前夫留下的家财改嫁西门庆，成了第三房。你心里有本账，不争不抢。",
@@ -630,7 +630,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "原是西门家的丫鬟，被抬为第四房妾。出身低微、性格怯懦，在妻妾中地位最低，受尽欺凌，结局凄惨。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/孙雪娥.webp",
       "timelines": {
         "妻妾争宠": {
           "background": "你是府里最没地位的一房妾，谁都能踩你一脚。你只能躲到灶下抹眼泪。",
@@ -690,7 +690,7 @@
       "starting_points": 35,
       "role": "main",
       "background": "清河县卖炊饼的小贩，身材矮小、老实本分。娶了潘金莲却守不住，反被妻子与人合谋毒死。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/武大郎.webp",
       "timelines": {
         "王婆说风情": {
           "background": "你每天挑着炊饼担子叫卖，妻子潘金莲却在家里与人私通，你还蒙在鼓里。",
@@ -750,7 +750,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "武大郎之弟，景阳冈打虎英雄，后任都头。刚烈血性、嫉恶如仇，为兄报仇，是贯穿全书的天理化身。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/武松.webp",
       "timelines": {
         "毒杀武大": {
           "background": "你从东京公干归来，发现兄长武大郎已死，灵堂里透着蹊跷。",
@@ -810,7 +810,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "清河县开茶坊的老婆子，能说会道、见钱眼开。贪贿撮合西门庆与潘金莲，又出毒计害死武大郎，是恶媒的典型。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/王婆.webp",
       "timelines": {
         "王婆说风情": {
           "background": "你开了间茶坊，西门庆看上了潘金莲。你眼珠一转，这笔生意做得。",
@@ -870,7 +870,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "西门庆的结拜兄弟，李瓶儿的丈夫。纨绔子弟、软弱好赌，守着家业却被西门庆算计，最终气死，家破人亡。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/花子虚.webp",
       "timelines": {
         "结拜发迹": {
           "background": "你是西门庆的结拜兄弟，成日斗鸡走狗。你不知道，兄弟早已盯上了你的家产和妻子。",
@@ -930,7 +930,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "西门庆的女婿，油头粉面的纨绔子弟。西门庆死后与潘金莲私通，最终流落破败。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/陈敬济.webp",
       "timelines": {
         "生子鼎盛": {
           "background": "你入赘西门家，锦衣玉食，却总想着府里的俏丫鬟和风流妇人。",
@@ -990,7 +990,7 @@
       "starting_points": 38,
       "role": "main",
       "background": "西门庆结拜十兄弟之首，破落户帮闲。油嘴滑舌、见风使舵，西门庆得意时百般奉承，失势时第一个开溜。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/应伯爵.webp",
       "timelines": {
         "结拜发迹": {
           "background": "你是十兄弟之首，靠着西门庆蹭吃蹭喝、混吃等死，还要装出一副肝胆相照的模样。",
@@ -1050,7 +1050,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "妓女出身，西门庆的第二房妾。风尘气重、精明算计，西门庆死后最先卷财改嫁。",
-      "image": "",
+      "image": "/images/characters/金瓶梅/李娇儿.webp",
       "timelines": {
         "结拜发迹": {
           "background": "你从妓院被赎出来，成了西门庆的第二房妾。你知道，男人的恩宠靠不住，得靠自己攒。",
@@ -1159,7 +1159,8 @@
             "stakes": "若慢了半拍，家败时你会被管家拿去顶债发卖，身契也保不住。"
           }
         }
-      }
+      },
+      "image": "/images/characters/金瓶梅/玳安.webp"
     },
     {
       "name": "秋菊",
@@ -1218,7 +1219,8 @@
             "stakes": "讨不到准话就是逃奴，被拿住要挨打，或被牙婆卖到别处去。"
           }
         }
-      }
+      },
+      "image": "/images/characters/金瓶梅/秋菊.webp"
     },
     {
       "name": "宋惠莲",
@@ -1253,7 +1255,8 @@
             "stakes": "菜被退回，你就成了五娘嘴里的把柄，来旺也保不住差事。"
           }
         }
-      }
+      },
+      "image": "/images/characters/金瓶梅/宋惠莲.webp"
     }
   ]
 }

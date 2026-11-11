@@ -44,7 +44,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "字孔明，号卧龙，琅琊阳都人。三国时期蜀汉丞相，杰出的政治家、军事家、文学家。",
-      "image": "",
+      "image": "/images/characters/三国演义/诸葛亮.webp",
       "timelines": {
         "赤壁之战": {
           "background": "你正于东吴舌战群儒，力主孙刘联盟。周瑜对你又敬又忌，而你心中已有火攻之计。",
@@ -128,7 +128,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "字子龙，常山真定人。身长八尺，姿颜雄伟，蜀汉名将，以忠勇著称。",
-      "image": "",
+      "image": "/images/characters/三国演义/赵云.webp",
       "timelines": {
         "赤壁之战": {
           "background": "你随刘备驻扎夏口，虽未直接参战，但已展现出非凡胆略。",
@@ -188,7 +188,7 @@
       "starting_points": 65,
       "role": "main",
       "background": "字孟德，小字阿瞒，沛国谯县人。东汉末年杰出政治家、军事家、文学家。魏武帝",
-      "image": "",
+      "image": "/images/characters/三国演义/曹操.webp",
       "timelines": {
         "官渡之战": {
           "background": "你与袁绍对峙于官渡，粮草将尽，但已定下奇袭乌巢之计。",
@@ -248,7 +248,7 @@
       "starting_points": 65,
       "role": "main",
       "background": "字仲达，河内温县人。三国时期魏国杰出军事家、政治家，善谋奇策，隐忍深沉。",
-      "image": "",
+      "image": "/images/characters/三国演义/司马懿.webp",
       "timelines": {
         "北伐中原": {
           "background": "你率魏军于街亭大破马谡，威震三军。但眼前之敌，是那六出祁山的诸葛孔明。",
@@ -308,7 +308,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "字本初，汝南汝阳人。出身四世三公，汉末最强诸侯，但在官渡之战中被曹操击败。",
-      "image": "",
+      "image": "/images/characters/三国演义/袁绍.webp",
       "timelines": {
         "官渡之战": {
           "background": "你拥河北四州之地，兵精粮足，在官渡与曹操对峙。但内部矛盾重重，田丰被囚，沮授苦谏。",
@@ -344,7 +344,7 @@
       "starting_points": 60,
       "role": "main",
       "background": "字公瑾，庐江舒城人。东吴名将，赤壁之战主帅，文武双全，风流倜傥。",
-      "image": "",
+      "image": "/images/characters/三国演义/周瑜.webp",
       "timelines": {
         "赤壁之战": {
           "background": "你身为联军主帅，与诸葛亮合力定下火攻之计。但你也深知，孔明必将成为东吴的心腹大患。",
@@ -380,7 +380,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "字玄德，涿郡涿县人，汉景帝玄孙中山靖王之后。虽织席贩履为业，但胸怀大志、仁义待人，与关羽张飞结为兄弟。蜀汉开国皇帝。",
-      "image": "",
+      "image": "/images/characters/三国演义/刘备.webp",
       "timelines": {
         "黄巾起义": {
           "background": "黄巾军攻州掠郡，天下大乱。你与关羽、张飞在桃园结义，誓同生死，招募乡勇抗敌。",
@@ -440,7 +440,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字云长，河东解良人。面如重枣，丹凤眼，卧蚕眉，使青龙偃月刀。义薄云天，被后世尊为武圣。",
-      "image": "",
+      "image": "/images/characters/三国演义/关羽.webp",
       "timelines": {
         "官渡之战": {
           "background": "你暂栖曹营，曹操以重金、美女相赠，你心不动。你心中只有大哥刘备的下落。",
@@ -500,7 +500,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "钜鹿人，太平道创始人。得《太平要术》，行医布道，信众遍布八州。一句'苍天已死，黄天当立'，揭开了乱世序幕。",
-      "image": "",
+      "image": "/images/characters/三国演义/张角.webp",
       "timelines": {
         "黄巾起义": {
           "background": "你头戴黄巾，手持九节杖，率三十六方教众起义。大汉天下，已被你掀得天翻地覆。",
@@ -536,7 +536,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字奉先，五原郡九原人。使方天画戟，骑赤兔马，号称'人中吕布，马中赤兔'。武艺盖世，但朝秦暮楚，为人反复。",
-      "image": "",
+      "image": "/images/characters/三国演义/吕布.webp",
       "timelines": {
         "董卓乱政": {
           "background": "你认董卓为义父，带甲护卫。但义父残暴，你心中不宁。王允设下连环计——你见到了那个女人，她叫貂蝉。",
@@ -572,7 +572,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "中国古代四大美女之一，司徒王允府中歌伎。在连环计中以美色离间董卓与吕布，以一身之力改变了天下大势。",
-      "image": "",
+      "image": "/images/characters/三国演义/貂蝉.webp",
       "timelines": {
         "董卓乱政": {
           "background": "王允大人将重任托付于你。你要用美貌和智慧，在两个豺狼之间周旋。一步错，万劫不复。",
@@ -608,7 +608,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "字公覆，零陵泉陵人。历仕孙坚、孙策、孙权三代，赤壁之战中献苦肉计诈降，火烧曹军战船，居功至伟。",
-      "image": "",
+      "image": "/images/characters/三国演义/黄盖.webp",
       "timelines": {
         "赤壁之战": {
           "background": "你与周瑜定下苦肉计——在众将面前挨了一顿毒打，遍体鳞伤，只为骗曹操你真心投降。",
@@ -644,7 +644,7 @@
       "starting_points": 40,
       "role": "main",
       "background": "庐江皖县人，与姐姐大乔并称'二乔'。国色天香，深得周瑜宠爱。赤壁之战时期，你虽身在深闺，却是周瑜心中最柔软处。",
-      "image": "",
+      "image": "/images/characters/三国演义/小乔.webp",
       "timelines": {
         "赤壁之战": {
           "background": "丈夫周瑜日夜谋划火攻之计，你为他研墨添香，抚琴解忧。你知道，这场战事决定了天下的命运——也决定了你们的未来。",
@@ -680,7 +680,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "吴侯孙权之妹，性格刚烈，喜好武艺，身边侍婢皆佩刀剑。嫁与刘备后，以才智周旋于孙刘两家的微妙关系中。",
-      "image": "",
+      "image": "/images/characters/三国演义/孙尚香.webp",
       "timelines": {
         "三国鼎立": {
           "background": "你嫁与刘备，来到蜀地。兄长孙权与丈夫刘备之间的暗流，你比任何人都看得清楚。你既是孙家的女儿，又是刘家的妻子——这个身份让每一步都如履薄冰。",
@@ -716,7 +716,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字伯约，天水冀县人。原为魏将，后归降诸葛亮，得其倾囊相授。诸葛亮死后，九伐中原，继承丞相遗志。",
-      "image": "",
+      "image": "/images/characters/三国演义/姜维.webp",
       "timelines": {
         "北伐中原": {
           "background": "丞相走了，把北伐的重任交给了你。你望着帐中诸葛亮留下的八阵图，握紧了手中长剑。",
@@ -777,7 +777,8 @@
             "stakes": "若惊动典韦，偷戟者当场被打死，张绣夜袭也全盘败露。"
           }
         }
-      }
+      },
+      "image": "/images/characters/三国演义/胡车儿.webp"
     },
     {
       "name": "王垕",
@@ -812,7 +813,8 @@
             "stakes": "补不上，曹操会借你的头平军怨，你死，家小也没入官府。"
           }
         }
-      }
+      },
+      "image": "/images/characters/三国演义/王垕.webp"
     },
     {
       "name": "蒋干",
@@ -847,7 +849,8 @@
             "stakes": "若空手而归，丞相会斩你，随从也难活"
           }
         }
-      }
+      },
+      "image": "/images/characters/三国演义/蒋干.webp"
     },
     {
       "name": "刘安",
@@ -882,7 +885,8 @@
             "stakes": "找不到肉，妻子没命，这个家今夜就散了"
           }
         }
-      }
+      },
+      "image": "/images/characters/三国演义/刘安.webp"
     }
   ]
 }

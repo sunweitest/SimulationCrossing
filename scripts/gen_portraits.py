@@ -53,7 +53,19 @@ STYLE = {
     "明代": "明代官场氛围，织金与乌纱",
     "清代": "清代宫廷氛围，石青与绛红",
     "废土末世": "废土末日氛围，锈铁与防尘布，尘霾逆光",
+    "都市霸总": "当代都市商战氛围，写字楼玻璃幕墙与夜色霓虹，剪裁利落的西装与衬衫",
+    "都市修真": "当代都市修真氛围，写字楼与霓虹背后的灵气微光，通勤装与旧道袍混搭",
+    "日常生活": "当代中国城市日常氛围，地铁站、出租屋与便利店灯光，普通的日常穿着",
 }
+
+# 现代题材：negative 里必须反过来压古装，不然会画出穿汉服的 CEO
+MODERN_WORLDS = {"都市霸总", "都市修真", "日常生活"}
+NEG_MODERN = (
+    "text, letters, watermark, logo, signature, UI, frame, border, cartoon, anime, "
+    "cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed face, extra limbs, "
+    "duplicate subject, hanfu, ancient chinese clothing, armor, palace, swordsman, "
+    "historical costume, plastic skin"
+)
 
 NEG = (
     "text, letters, watermark, logo, signature, UI, frame, border, cartoon, anime, "
@@ -94,14 +106,14 @@ def build_prompt(world: str, ch: dict) -> str:
     )
 
 
-def request_image(key: str, prompt: str, size: str) -> bytes:
+def request_image(key: str, prompt: str, size: str, neg: str = NEG) -> bytes:
     body = {
         "model": MODEL,
         "input": {"messages": [{"role": "user", "content": [{"text": prompt}]}]},
         "parameters": {
             "prompt_extend": True,
             "size": size,
-            "negative_prompt": NEG,
+            "negative_prompt": neg,
             "watermark": False,
         },
     }
@@ -130,7 +142,7 @@ def gen_one(key: str, world: str, ch: dict, force: bool) -> tuple[str, str, floa
     for attempt in range(3):
         t0 = time.time()
         try:
-            blob = request_image(key, prompt, SIZE)
+            blob = request_image(key, prompt, SIZE, NEG_MODERN if world in MODERN_WORLDS else NEG)
             tmp = dst.with_suffix(".part")
             tmp.write_bytes(blob)
             tmp.replace(dst)

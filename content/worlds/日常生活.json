@@ -113,7 +113,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/林一.webp"
     },
     {
       "name": "何晴",
@@ -173,7 +173,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/何晴.webp"
     },
     {
       "name": "王富贵",
@@ -233,7 +233,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/王富贵.webp"
     },
     {
       "name": "李小满",
@@ -293,7 +293,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/李小满.webp"
     },
     {
       "name": "周正",
@@ -353,7 +353,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/周正.webp"
     },
     {
       "name": "沈舟",
@@ -389,7 +389,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/沈舟.webp"
     },
     {
       "name": "老陈",
@@ -425,7 +425,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/老陈.webp"
     },
     {
       "name": "张桂兰",
@@ -461,7 +461,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/张桂兰.webp"
     },
     {
       "name": "阿凯",
@@ -521,7 +521,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/日常生活/阿凯.webp"
     }
   ]
 }

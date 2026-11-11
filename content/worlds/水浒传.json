@@ -44,7 +44,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "字公明，绰号呼保义、及时雨，梁山一百单八将之首。",
-      "image": "",
+      "image": "/images/characters/水浒传/宋江.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你刚上梁山，晁盖尚在，众好汉对你既敬且疑。",
@@ -128,7 +128,7 @@
       "starting_points": 46,
       "role": "main",
       "background": "绰号行者，又称武二郎，景阳冈打虎英雄，勇猛刚烈，义薄云天。",
-      "image": "",
+      "image": "/images/characters/水浒传/武松.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你刚上梁山，因打虎、杀西门庆之名，备受敬重。",
@@ -212,7 +212,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "绰号豹子头，原为东京八十万禁军教头，武艺高强，上梁山。",
-      "image": "",
+      "image": "/images/characters/水浒传/林冲.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你已被逼上梁山，但心中对朝廷仍有眷恋，郁郁寡欢。",
@@ -272,7 +272,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "绰号一丈青，祝家庄扈家庄千金。武艺高强，使两口日月双刀，后为梁山所擒。",
-      "image": "",
+      "image": "/images/characters/水浒传/扈三娘.webp",
       "timelines": {
         "攻打祝家庄": {
           "background": "梁山大军压境，你率扈家兵马助战祝家庄。但祝彪跋扈，扈成懦弱，你独力支撑。",
@@ -356,7 +356,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "绰号黑旋风，沂水县百丈村人。粗犷豪放，力大无穷，使两把板斧。对宋江忠心耿耿，但性情暴烈，常因鲁莽闯祸。",
-      "image": "",
+      "image": "/images/characters/水浒传/李逵.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你初上梁山，见满堂好汉，心中热血沸腾。只要有酒有肉有架打，梁山便是你的家。",
@@ -416,7 +416,7 @@
       "starting_points": 55,
       "role": "main",
       "background": "绰号花和尚，俗名鲁达，原为渭州经略府提辖。三拳打死镇关西后出家为僧，倒拔垂杨柳，性格豪爽仗义。",
-      "image": "",
+      "image": "/images/characters/水浒传/鲁智深.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你倒拔垂杨柳，三拳打死镇关西，如今上了梁山。你从不念经，但佛在心里——酒肉穿肠过，佛祖心中留。",
@@ -476,7 +476,7 @@
       "starting_points": 45,
       "role": "main",
       "background": "绰号母夜叉，十字坡酒店老板娘。与丈夫张青在十字坡卖人肉包子，后随夫上梁山。武功高强，性格泼辣。",
-      "image": "",
+      "image": "/images/characters/水浒传/孙二娘.webp",
       "timelines": {
         "梁山聚义": {
           "background": "你把十字坡的包子铺关了，跟着张青上了梁山。那些看不起女人的好汉们——让他们见识见识母夜叉的厉害！",
@@ -512,7 +512,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "绰号浪子，又名燕小乙，卢俊义的家仆，精通相扑、弓弩，吹拉弹唱无一不精。风流潇洒，是梁山好汉中少有的才子。",
-      "image": "",
+      "image": "/images/characters/水浒传/燕青.webp",
       "timelines": {
         "招安之路": {
           "background": "你随宋江进东京谈判招安。朝堂上那些官老爷看不起梁山草寇——但你的才华与风度，让他们不得不侧目。",
@@ -572,7 +572,7 @@
       "starting_points": 50,
       "role": "main",
       "background": "当朝太尉，奉旨前往江西龙虎山请天师禳灾。好奇心重且刚愎自用，不顾真人劝阻，执意打开伏魔殿，放出三十六天罡、七十二地煞——从此天下大乱。",
-      "image": "",
+      "image": "/images/characters/水浒传/洪信.webp",
       "timelines": {
         "洪太尉访道": {
           "background": "京师瘟疫横行，仁宗天子命你前往江西龙虎山请张天师禳灾。你本不以为然——一个道士，能有什么真本事？",
@@ -608,7 +608,7 @@
       "starting_points": 65,
       "role": "main",
       "background": "龙虎山嗣汉天师府第三十代天师张继先，号虚靖先生。道法高深，预知未来，早已算到洪太尉此行将酿成大祸——但他知道，这是天数。",
-      "image": "",
+      "image": "/images/characters/水浒传/张天师.webp",
       "timelines": {
         "洪太尉访道": {
           "background": "京师有旨，太尉洪信要来请你禳灾。但你掐指一算，已知此行真正目的不在瘟疫——而是伏魔殿。",
@@ -644,7 +644,7 @@
       "starting_points": 35,
       "role": "main",
       "background": "龙虎山上清宫道童，年幼天真，负责引导洪太尉参观。无意中成了打开伏魔殿的'帮凶'。",
-      "image": "",
+      "image": "/images/characters/水浒传/清风.webp",
       "timelines": {
         "洪太尉访道": {
           "background": "你是上清宫最机灵的道童。今日来了个大人物——洪太尉。住持让你引他游览，你不敢怠慢。但你不知道，这位大人将做出何等惊人之举。",
@@ -680,7 +680,7 @@
       "starting_points": 70,
       "role": "main",
       "background": "北宋第四位皇帝，年号嘉祐。仁义之君，在位四十二年。因京师瘟疫肆虐、百姓苦不堪言，命洪信前往龙虎山请天师祈福。",
-      "image": "",
+      "image": "/images/characters/水浒传/赵祯.webp",
       "timelines": {
         "洪太尉访道": {
           "background": "京师瘟疫横行，每天都有百姓死于疾疫。你斋戒沐浴，祭告天地，但似乎无济于事。有人奏报：龙虎山张天师能禳灾——你将全部希望押在了这道圣旨上。",
@@ -741,7 +741,8 @@
             "stakes": "真动了手，林冲死在林里；不动手，高衙内那边要你俩的命抵账"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/董超.webp"
     },
     {
       "name": "薛霸",
@@ -776,7 +777,8 @@
             "stakes": "林冲若活，你和董超必被供出，赏钱成催命符。"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/薛霸.webp"
     },
     {
       "name": "郓哥",
@@ -811,7 +813,8 @@
             "stakes": "武大若不信或走漏风声，会被毒死在床上；郓哥也断了梨的生意，老爹跟着饿肚子。"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/郓哥.webp"
     },
     {
       "name": "何九叔",
@@ -846,7 +849,8 @@
             "stakes": "骨头被搜出，你被西门庆灭口，武大之死再无凭据。"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/何九叔.webp"
     },
     {
       "name": "白胜",
@@ -881,7 +885,8 @@
             "stakes": "药不倒军汉，杨志识破报官，两桶酒翻，你欠的赌债买不回命"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/白胜.webp"
     },
     {
       "name": "李小二",
@@ -916,7 +921,8 @@
             "stakes": "林冲若被烧死，你一家也难逃陆虞候灭口"
           }
         }
-      }
+      },
+      "image": "/images/characters/水浒传/李小二.webp"
     }
   ]
 }

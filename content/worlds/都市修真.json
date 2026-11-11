@@ -113,7 +113,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/陈默.webp"
     },
     {
       "name": "白露",
@@ -173,7 +173,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/白露.webp"
     },
     {
       "name": "老周",
@@ -233,7 +233,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/老周.webp"
     },
     {
       "name": "苏问",
@@ -293,7 +293,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/苏问.webp"
     },
     {
       "name": "高见",
@@ -353,7 +353,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/高见.webp"
     },
     {
       "name": "郑守业",
@@ -413,7 +413,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/郑守业.webp"
     },
     {
       "name": "阿拐",
@@ -449,7 +449,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/阿拐.webp"
     },
     {
       "name": "马道长",
@@ -485,7 +485,7 @@
           }
         }
       },
-      "image": ""
+      "image": "/images/characters/都市修真/马道长.webp"
     }
   ]
 }
