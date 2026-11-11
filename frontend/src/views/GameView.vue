@@ -163,7 +163,7 @@
           <h3>今天的次数用完了</h3>
           <p class="quota-modal-desc">
             免费次数每天 0 点自动恢复。<br>
-            想现在继续，可联系作者开通次数。
+            想现在继续，可以买次数包或开通月卡。
           </p>
           <div class="quota-modal-qq">
             <span class="qq-label">作者 QQ</span>
@@ -173,6 +173,7 @@
             {{ qqCopied ? 'QQ 号已复制，去 QQ 搜索添加即可' : '加好友时备注「小说充值」，作者会尽快回复' }}
           </p>
           <div class="quota-modal-actions">
+            <button class="btn-pricing" @click="goPricing">查看定价与开通</button>
             <button class="btn-copy-qq" @click="copyQQ">{{ qqCopied ? '✅ 已复制' : '复制 QQ 号' }}</button>
             <button class="btn-later" @click="showQuotaModal = false">明天再说</button>
           </div>
@@ -303,6 +304,7 @@ import { useGameStore } from '@/stores/game'
 import { useAuthStore } from '@/stores/auth'
 import { gameAPI } from '@/api'
 import { WORLD_ART, heroOf, thumbOf, captionOf, bgLayers } from '@/utils/worldArt'
+import { AUTHOR_QQ } from '@/content/contact'
 
 const router = useRouter()
 const route = useRoute()
@@ -316,8 +318,12 @@ const needsLogin = ref(false)
 const loadFailed = ref(false)
 
 // 登录用户次数用完 → 弹窗引导充值
-const QQ_NUMBER = '1306344250'
+const QQ_NUMBER = AUTHOR_QQ
 const showQuotaModal = ref(false)
+const goPricing = () => {
+  showQuotaModal.value = false
+  router.push('/pricing')
+}
 const qqCopied = ref(false)
 const copyQQ = async () => {
   try {
@@ -1040,7 +1046,7 @@ const backToHome = () => {
   user-select: all;
 }
 .quota-modal-tip { margin: 0 0 16px; font-size: 0.81rem; line-height: 1.6; color: #a6a29a; }
-.quota-modal-actions { display: flex; gap: 10px; }
+.quota-modal-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .quota-modal-actions button {
   flex: 1;
   padding: 11px 0;
@@ -1050,6 +1056,8 @@ const backToHome = () => {
   cursor: pointer;
   transition: opacity 0.2s, background 0.2s;
 }
+.btn-pricing { flex: 1 0 100% !important; background: #e8d9a8; color: #1d2029; font-weight: 700; }
+.btn-pricing:hover { opacity: 0.92; }
 .btn-copy-qq { background: #c9a227; color: #1d2029; font-weight: 600; }
 .btn-copy-qq:hover { opacity: 0.9; }
 .btn-later { background: rgba(255, 255, 255, 0.1); color: #d5d3cf; }

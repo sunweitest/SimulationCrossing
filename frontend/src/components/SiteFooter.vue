@@ -2,6 +2,8 @@
   <footer class="site-footer">
     <div class="site-footer-inner">
       <nav class="footer-links">
+        <router-link to="/pricing">定价</router-link>
+        <span class="dot">·</span>
         <router-link to="/privacy">隐私政策</router-link>
         <span class="dot">·</span>
         <router-link to="/terms">服务条款</router-link>
