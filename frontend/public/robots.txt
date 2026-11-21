@@ -1,0 +1,100 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: bingbot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: Baiduspider
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: YisouSpider
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: Sogou web spider
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: Bytespider
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+User-agent: Applebot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /game/
+Disallow: /my-games
+Disallow: /login
+Disallow: /register
+
+Sitemap: https://wanchuanyue.com/sitemap.xml
