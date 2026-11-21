@@ -247,8 +247,13 @@ def main() -> None:
     robots.append(f"Sitemap: {SITE}/sitemap.xml")
     (PUBLIC / "robots.txt").write_text("\n".join(robots) + "\n", encoding="utf-8")
 
-    key_path.write_text(index_key + "\n", encoding="utf-8")
-    (PUBLIC / f"{index_key}.txt").write_text(index_key + "\n", encoding="utf-8")
+    # 只在内容变了才写：key 是长期固定的，反复覆盖会踩到文件属主（部署时 chown 成 www-data，
+    # 手工用 root/ubuntu 跑就会 Permission denied），也容易让 git 多出无意义的改动。
+    if not key_path.exists() or key_path.read_text(encoding="utf-8").strip() != index_key:
+        key_path.write_text(index_key + "\n", encoding="utf-8")
+    key_file = PUBLIC / f"{index_key}.txt"
+    if not key_file.exists() or key_file.read_text(encoding="utf-8").strip() != index_key:
+        key_file.write_text(index_key + "\n", encoding="utf-8")
 
     print(f"世界页 {len(worlds)} 个 → {out_dir}")
     print(f"sitemap.xml {len(entries)} 条 / robots.txt / IndexNow {index_key[:8]}…")
