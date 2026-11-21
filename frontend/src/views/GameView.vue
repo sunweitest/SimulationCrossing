@@ -73,11 +73,25 @@
     </div>
 
     <!-- ===== 剧情文字浮层（居中，固定尺寸，带滑动） ===== -->
-    <div v-if="currentScene" class="story-overlay">
+    <div v-if="currentScene" class="story-overlay" :class="{ 'is-hidden': immersive }">
+      <button
+        v-if="!immersive"
+        class="story-hide-btn"
+        title="隐藏剧情，看完整背景图"
+        aria-label="隐藏剧情"
+        @click="toggleImmersive"
+      >👁</button>
       <div class="story-text" ref="storyTextEl">
         <p>{{ displayedScene }}</p>
       </div>
     </div>
+
+    <!-- ===== 沉浸模式的恢复按钮（剧情与行动栏都藏起来时） ===== -->
+    <button
+      v-if="currentScene && immersive && !mission?.ended"
+      class="story-restore-btn"
+      @click="toggleImmersive"
+    >← 显示剧情</button>
 
     <!-- ===== 终局面板 ===== -->
     <div v-if="mission?.ended" class="ending-mask">
@@ -98,7 +112,12 @@
     </div>
 
     <!-- ===== 底部行动栏 ===== -->
-    <div v-if="currentScene && !mission?.ended" class="bottom-bar" ref="bottomBarEl">
+    <div
+      v-if="currentScene && !mission?.ended"
+      class="bottom-bar"
+      :class="{ 'is-hidden': immersive }"
+      ref="bottomBarEl"
+    >
       <div class="action-buttons">
         <button
           v-for="(choice, index) in currentScene.choices"
@@ -634,6 +653,12 @@ const doRewind = async () => {
   }
 }
 
+// ── 沉浸模式：一键收起剧情浮层与行动栏，露出完整的背景图 ──
+const immersive = ref(false)
+const toggleImmersive = () => {
+  immersive.value = !immersive.value
+}
+
 // ── 移动端布局：底部行动栏高度写进 CSS 变量，剧情框不再被遮住 ──
 const bottomBarEl = ref(null)
 let barObserver = null
@@ -1101,11 +1126,90 @@ const backToHome = () => {
   letter-spacing: 1.5px;
   white-space: pre-wrap;
   word-break: break-word;
-  padding-right: 4px;
+  /* 右上角有「隐藏剧情」按钮，正文右侧留出让位，第一行不会被按钮压住 */
+  padding-right: 30px;
 }
 
 .story-text p {
   margin: 0;
+}
+
+/* ===== 沉浸模式：藏起剧情与行动栏，让背景图完整露出来 ===== */
+.story-overlay,
+.bottom-bar {
+  transition: opacity 0.3s ease;
+}
+
+.story-overlay.is-hidden,
+.bottom-bar.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.story-hide-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(255, 232, 190, 0.72);
+  background: rgba(10, 10, 20, 0.35);
+  border: 1px solid rgba(255, 215, 150, 0.22);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.story-hide-btn:hover {
+  opacity: 1;
+  color: #ffe9a8;
+  background: rgba(10, 10, 20, 0.6);
+}
+
+.story-restore-btn {
+  position: fixed;
+  right: 18px;
+  bottom: 22px;
+  z-index: 7;
+  padding: 8px 16px;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: rgba(255, 232, 190, 0.9);
+  background: rgba(10, 10, 20, 0.55);
+  border: 1px solid rgba(255, 215, 150, 0.28);
+  border-radius: 999px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.story-restore-btn:hover {
+  color: #ffe9a8;
+  border-color: rgba(255, 215, 150, 0.55);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .story-hide-btn {
+    top: 8px;
+    right: 10px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .story-restore-btn {
+    right: 12px;
+    bottom: 14px;
+    padding: 7px 14px;
+  }
 }
 
 /* 滚动条美化 */
