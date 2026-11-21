@@ -117,6 +117,33 @@ ANCIENT_ATTIRE = [
     ),
 ]
 
+WASTE_WORLDS = {"废土末世"}
+NEG_WASTE = (
+    "text, letters, watermark, logo, signature, UI, frame, border, cartoon, anime, "
+    "cel shading, oversaturated, lowres, jpeg artifacts, blurry, deformed face, extra limbs, "
+    "duplicate subject, hanfu, ancient chinese clothing, palace, swordsman, historical costume, "
+    "plate armor, knight, clean luxury suit, glossy plastic skin, modern brand logo"
+)
+
+# 废土不是古装也不是写字楼：衣服要「脏旧但整理过」，靠补丁、叠穿、工具袋来说身份
+WASTE_ATTIRE = [
+    (
+        r"执誓者|守誓者",
+        "身穿洗得发白、补丁针脚整齐的旧工装外套，袖口磨破，左臂一块褪色的布条臂章，手里一根磨亮的木杖，"
+        "脸和手上有尘土与干裂的纹路，站姿很稳，眼神不带攻击性",
+    ),
+    (
+        r"布道|宣讲|主持|喇叭",
+        "穿一件不合身但干净的旧西装外套，内搭高领毛衣，胸前别着手工缝的布徽，头发仔细梳过，"
+        "在一身脏旧的人群里显得过分整洁，那种整洁本身就是权力",
+    ),
+    (
+        r"记事|史官|管理|教师|老师",
+        "穿打补丁的厚帆布夹克，斜挎磨旧的帆布包，一手硬壳笔记本、一手短铅笔，脖子上挂着手电筒，"
+        "指节有洗不掉的墨迹，皮肤晒成褐色",
+    ),
+]
+
 MODERN_ATTIRE = [
     (
         r"总裁|董事|CEO|创始人|董事长|老板|投资人",
@@ -169,6 +196,12 @@ def infer_attire(world: str, ch: dict) -> str:
     rank = ch.get("rank") or ""
     bg = ch.get("background") or ""
     blob = f"{rank} {bg[:80]}"
+    if world in WASTE_WORLDS:
+        for pattern, text in WASTE_ATTIRE:
+            if re.search(pattern, blob):
+                return text
+        return ("身穿多层叠穿的废土工装：旧夹克、围巾与防尘布，腰间挂着水壶和工具袋，"
+                "布料脏旧但整理得利落，边缘有磨损与缝补痕迹")
     table = MODERN_ATTIRE if world in MODERN_WORLDS else ANCIENT_ATTIRE
     for pattern, text in table:
         if re.search(pattern, blob):
@@ -189,6 +222,8 @@ def infer_props(world: str, ch: dict) -> str:
 
 
 def negative_for(world: str, ch: dict) -> str:
+    if world in WASTE_WORLDS:
+        return NEG_WASTE
     base = NEG_MODERN if world in MODERN_WORLDS else NEG
     if world in MODERN_WORLDS:
         return base
@@ -222,7 +257,7 @@ def build_prompt(world: str, ch: dict) -> str:
         f"风格：{art}。",
         f"服饰：{attire}。",
         (f"道具：{prop}。" if prop else ""),
-        f"人物：半身肖像，{ch.get('name')}，{ch.get('gender') or ''}，{age_txt}，身份是{ch.get('rank') or '普通人'}；{mood}。",
+        f"人物：半身肖像，东亚面孔的中国人，{ch.get('name')}，{ch.get('gender') or ''}，{age_txt}，身份是{ch.get('rank') or '普通人'}；{mood}。",
         (f"线索：{bg[:60]}。" if bg else ""),
         "构图到腰部，能看清服饰的纹样、材质与配饰；" + ("双手入画，手指与袖口细节清晰；" if royal else "") + "侧前方一束光打在脸上，形成明暗对比，",
         "背景虚化但保留环境信息，浅景深，35mm，真实光影与细腻质感，画面高级不廉价。",
